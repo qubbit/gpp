@@ -17,6 +17,9 @@ import {
   installPrelude,
   RuntimeError,
 } from "./builtins.js";
+import { COLLECTIONS_SOURCE } from "./collections.gpp.js";
+import { Lexer } from "./lexer.js";
+import { parse } from "./parser.js";
 import {
   Environment,
   isCallable,
@@ -52,6 +55,26 @@ export interface RunOptions {
 }
 
 const DEFAULT_MAX_STEPS = 5_000_000;
+
+// modules implemented in gpp. `exports` maps the imported name to the name the
+// source declares, so `map` can be exported without shadowing the prelude's
+// `map` inside the module itself.
+const SOURCE_MODULES: Record<
+  string,
+  { code: string; exports: Record<string, string> }
+> = {
+  collections: {
+    code: COLLECTIONS_SOURCE,
+    exports: {
+      stack: "stack",
+      queue: "queue",
+      set: "set",
+      map: "map_new",
+      linked_list: "linked_list",
+      priority_queue: "priority_queue",
+    },
+  },
+};
 
 export class Evaluator {
   private globals = new Environment();
@@ -327,7 +350,10 @@ export class Evaluator {
     // stays legal for programs that spell the import out
     if (statement.source === "prelude") return;
 
-    const module = this.modules[statement.source];
+    const module =
+      this.modules[statement.source] ??
+      this.loadSourceModule(statement.source);
+
     if (!module) {
       throw new RuntimeError(
         `Unknown module '${statement.source}'`,
@@ -347,6 +373,34 @@ export class Evaluator {
       }
       env.define(specifier.name, value);
     }
+  }
+
+  /**
+   * modules written in gpp rather than as native functions. the source is
+   * evaluated once in its own scope, and the names it declares become the
+   * module's exports. caching means two imports share one instance of each
+   * constructor, which matters only for identity.
+   */
+  private loadSourceModule(name: string): Record<string, Value> | undefined {
+    const source = SOURCE_MODULES[name];
+    if (!source) return undefined;
+
+    // a module sees the prelude but not the importing program's scope
+    const scope = new Environment(this.globals);
+    const program = parse(new Lexer().lex(source.code));
+
+    for (const statement of program.body) {
+      this.execute(statement, scope);
+    }
+
+    const exports: Record<string, Value> = {};
+    for (const [exported, declared] of Object.entries(source.exports)) {
+      const value = scope.get(declared);
+      if (value !== undefined) exports[exported] = value;
+    }
+
+    this.modules[name] = exports;
+    return exports;
   }
 
   private iterableToArray(value: Value, statement: Statement): Value[] {

@@ -103,7 +103,20 @@ const PRELUDE_TYPES: Record<string, Type> = {
 // builtins that take any number of arguments, so arity is not checked
 const VARIADIC = new Set(["print", "min", "max"]);
 
+// the collections are written in gpp and return closures over private state.
+// without generics their contents cannot be described, so a constructor is
+// typed as returning any: enough to check the import, not the method calls.
+const COLLECTION_CONSTRUCTORS: Record<string, Type> = {
+  stack: functionOf([], ANY),
+  queue: functionOf([], ANY),
+  priority_queue: functionOf([], ANY),
+  linked_list: functionOf([], ANY),
+  set: functionOf([arrayOf(ANY)], ANY),
+  map: functionOf([arrayOf(ANY)], ANY),
+};
+
 const MODULE_TYPES: Record<string, Record<string, Type>> = {
+  collections: COLLECTION_CONSTRUCTORS,
   math: {
     sin: functionOf([NUMBER], NUMBER),
     cos: functionOf([NUMBER], NUMBER),

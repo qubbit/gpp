@@ -17,9 +17,9 @@
     // and npm install -D @types/node
 
     // Other Outputs
-    "sourceMap": true,
-    "declaration": true,
-    "declarationMap": true,
+    // typecheck only: emitting .js beside each .ts leaves artifacts that
+    // shadow the sources, and vite resolves the stale .js in preference
+    "noEmit": true,
 
     // Stricter Typechecking Options
     "noUncheckedIndexedAccess": true,

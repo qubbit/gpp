@@ -36,6 +36,11 @@ const BUILTINS = [
   "abs", "min", "max", "floor", "ceil", "round", "sqrt",
 ];
 
+// constructors from the collections module, highlighted once imported
+const COLLECTIONS = [
+  "stack", "queue", "set", "linked_list", "priority_queue",
+];
+
 export function registerGppLanguage(monaco: Monaco): void {
   // registering twice would stack duplicate providers on a hot reload
   if (monaco.languages.getLanguages().some((lang: { id: string }) => lang.id === LANGUAGE_ID)) return;
@@ -71,6 +76,7 @@ export function registerGppLanguage(monaco: Monaco): void {
     keywords: KEYWORDS,
     typeKeywords: TYPE_KEYWORDS,
     builtins: BUILTINS,
+    collections: COLLECTIONS,
 
     // longest first, so `->` and `==` win over `-` and `=`
     operators: [
@@ -95,6 +101,7 @@ export function registerGppLanguage(monaco: Monaco): void {
           cases: {
             "@keywords": "keyword",
             "@builtins": "support.function",
+            "@collections": "support.class",
             "@default": "entity.name.function",
           },
         }],
@@ -173,6 +180,12 @@ export function registerGppLanguage(monaco: Monaco): void {
           insertText: label,
           range,
         })),
+        ...COLLECTIONS.map((label) => ({
+          label,
+          kind: monaco.languages.CompletionItemKind.Class,
+          insertText: label,
+          range,
+        })),
         ...TYPE_KEYWORDS.map((label) => ({
           label,
           kind: monaco.languages.CompletionItemKind.TypeParameter,
@@ -192,6 +205,7 @@ export function registerGppLanguage(monaco: Monaco): void {
       { token: "keyword", foreground: "c792ea", fontStyle: "bold" },
       { token: "keyword.operator.arrow", foreground: "89ddff" },
       { token: "support.function", foreground: "82aaff" },
+      { token: "support.class", foreground: "7fdbca" },
       { token: "entity.name.function", foreground: "82aaff" },
       { token: "type", foreground: "ffcb6b" },
       { token: "type.identifier", foreground: "ffcb6b" },
@@ -222,6 +236,7 @@ export function registerGppLanguage(monaco: Monaco): void {
       { token: "keyword", foreground: "7c3aed", fontStyle: "bold" },
       { token: "keyword.operator.arrow", foreground: "0369a1" },
       { token: "support.function", foreground: "2563eb" },
+      { token: "support.class", foreground: "0f766e" },
       { token: "entity.name.function", foreground: "2563eb" },
       { token: "type", foreground: "b45309" },
       { token: "type.identifier", foreground: "b45309" },

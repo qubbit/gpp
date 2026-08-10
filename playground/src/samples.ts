@@ -313,6 +313,143 @@ for line in triangle(5) {
   },
 
   {
+    id: "collections",
+    name: "Collections",
+    description: "Stack, queue, set, map and linked list",
+    source: `// the collections module is written in gpp itself. each constructor
+// returns an object whose fields are closures over private state, so
+// the calls read like methods.
+
+from collections import stack, queue, set, map, linked_list
+
+// last in, first out
+let s = stack()
+s.push("a")
+s.push("b")
+print("stack pop:", s.pop(), "peek:", s.peek(), "size:", s.size())
+
+// first in, first out
+let q = queue()
+for job in ["one", "two", "three"] {
+  q.push(job)
+}
+print("queue pop:", q.pop(), "next:", q.peek(), "size:", q.size())
+
+// unique values, of any type
+let seen = set([1, 2, 2, 3, 3, 3])
+print("set size:", seen.size(), "has 2:", seen.contains(2))
+seen.remove(2)
+print("after remove:", seen.to_array())
+
+// keys of any type, not just strings
+let ages = map([])
+ages.set("ada", 36)
+ages.set("grace", 45)
+ages.set(1815, "ada's birth year")
+print("ada is", ages.get("ada"))
+print("numeric key:", ages.get(1815))
+print("keys:", ages.keys())
+
+// a real linked list, with nodes and a next pointer
+let list = linked_list()
+for value in [2, 3, 4] {
+  list.push(value)
+}
+list.prepend(1)
+print("list:", list.to_array(), "first:", list.first(), "last:", list.last())
+
+list.reverse()
+print("reversed:", list.to_array())
+
+list.remove(3)
+print("after remove:", list.to_array(), "size:", list.size())
+`,
+  },
+
+  {
+    id: "dijkstra",
+    name: "Dijkstra",
+    description: "Shortest paths, using the collections module",
+    source: `// dijkstra's shortest path, built from the collections module.
+//
+// the priority queue always hands back the closest unvisited node, which
+// is what makes the algorithm greedy and still correct.
+
+from collections import map, set, priority_queue
+
+// a weighted directed graph: each node lists its outgoing edges
+let graph = {
+  a: [{to: "b", weight: 4}, {to: "c", weight: 2}],
+  b: [{to: "c", weight: 5}, {to: "d", weight: 10}],
+  c: [{to: "e", weight: 3}],
+  d: [{to: "f", weight: 11}],
+  e: [{to: "d", weight: 4}],
+  f: []
+}
+
+fn dijkstra(graph, source) {
+  let dist = map([])      // node -> best known cost
+  let prev = map([])      // node -> the node we arrived from
+  let visited = set([])   // nodes whose cost is final
+  let frontier = priority_queue()
+
+  dist.set(source, 0)
+  frontier.push(source, 0)
+
+  while !frontier.is_empty() {
+    let node = frontier.pop()
+
+    // the same node can be queued more than once at different costs;
+    // the first time it comes out is the cheapest, so skip the rest
+    if visited.contains(node) {
+      continue
+    }
+    visited.add(node)
+
+    let cost_here = dist.get(node)
+
+    for edge in graph[node] {
+      let candidate = cost_here + edge.weight
+      let best = dist.get(edge.to)
+
+      // nil means we have not reached this node yet
+      if best == nil || candidate < best {
+        dist.set(edge.to, candidate)
+        prev.set(edge.to, node)
+        frontier.push(edge.to, candidate)
+      }
+    }
+  }
+
+  return {dist: dist, prev: prev}
+}
+
+// walk the prev chain backwards from the target
+fn path_to(prev, target) {
+  let out = [target]
+  let at = target
+  while prev.get(at) != nil {
+    at = prev.get(at)
+    out = push(out, at)
+  }
+  return reverse(out)
+}
+
+let result = dijkstra(graph, "a")
+
+print("shortest paths from a:")
+for node in ["b", "c", "d", "e", "f"] {
+  let cost = result.dist.get(node)
+  let route = join(path_to(result.prev, node), " -> ")
+  print("  " + node + ": cost " + str(cost) + " via " + route)
+}
+
+// note d: the direct route a -> b -> d costs 14, but going
+// a -> c -> e -> d costs 9, and that is what the algorithm finds.
+`,
+  },
+
+  {
     id: "memo",
     name: "Memoisation",
     description: "Caching results in an object across calls",
