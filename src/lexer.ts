@@ -17,7 +17,6 @@ enum TokenType {
   RParen = ")",
   LBrace = "{",
   RBrace = "}",
-  NewLine = "\n",
   True = "true",
   False = "false",
 }
@@ -59,12 +58,6 @@ export class Lexer {
         }
         continue;
       }
-
-      // if (c == "\n") {
-      //   cursor++;
-      //   this.tokens.push({ type: TokenType.NewLine, lexeme: c, value: c });
-      //   continue;
-      // }
 
       if (/\s/.test(c)) {
         cursor++;
