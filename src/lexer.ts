@@ -9,6 +9,7 @@ export enum TokenType {
   Arrow = "->",
   Dot = ".",
   Semicolon = ";",
+  Question = "?",
   Let = "let",
   If = "if",
   Else = "else",
@@ -58,6 +59,7 @@ const KEYWORDS: Record<string, TokenType> = {
 const SINGLE_CHAR_TOKENS: Record<string, TokenType> = {
   ":": TokenType.Colon,
   ";": TokenType.Semicolon,
+  "?": TokenType.Question,
   ".": TokenType.Dot,
   "(": TokenType.LParen,
   ")": TokenType.RParen,

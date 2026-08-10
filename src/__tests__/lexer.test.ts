@@ -47,7 +47,7 @@ describe("regressions", () => {
 
   test("every unknown character is consumed before throwing", () => {
     // if any of these failed to advance the cursor the call would not return
-    for (const char of ["@", "#", "$", "~", "?", "'", "`", "\\"]) {
+    for (const char of ["@", "#", "$", "~", "'", "`", "\\"]) {
       assert.match(errorOf(`a ${char} b`) ?? "", /Unexpected character/);
     }
   });
@@ -244,6 +244,16 @@ describe("operators", () => {
 });
 
 describe("punctuation", () => {
+  // `?` marks an optional interface field
+  test("a question mark is its own token", () => {
+    assert.deepEqual(types("debug?: bool"), [
+      TokenType.Identifier,
+      TokenType.Question,
+      TokenType.Colon,
+      TokenType.Identifier,
+    ]);
+  });
+
   test("each punctuation character has its own type", () => {
     assert.deepEqual(types("( ) { } [ ] , : ; ."), [
       TokenType.LParen,

@@ -415,7 +415,8 @@ export class Parser {
     while (!this.check(TokenType.RBrace) && !this.isAtEnd()) {
       if (this.match(TokenType.Semicolon) || this.match(TokenType.Comma)) continue;
       const fieldName = this.expect(TokenType.Identifier, "as a field name");
-      const optional = this.match(TokenType.BinaryOperator) ? true : false;
+      // `name?: type` marks the field optional
+      const optional = this.match(TokenType.Question);
       this.expect(TokenType.Colon, "after a field name");
       const type = this.parseType();
       fields.push({
@@ -1097,11 +1098,12 @@ export class Parser {
       while (!this.check(TokenType.RBrace) && !this.isAtEnd()) {
         if (this.match(TokenType.Semicolon) || this.match(TokenType.Comma)) continue;
         const name = this.expect(TokenType.Identifier, "as a field name");
+        const optional = this.match(TokenType.Question);
         this.expect(TokenType.Colon, "after a field name");
         fields.push({
           name: name.lexeme,
           type: this.parseType(),
-          optional: false,
+          optional,
           line: name.line,
           column: name.column,
         });
