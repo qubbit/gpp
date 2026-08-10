@@ -1,8 +1,8 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { Lexer } from "../lexer";
-import { parse, ParseError } from "../parser";
-import type { Expression, Program, Statement } from "../ast";
+import { Lexer } from "../lexer.js";
+import { parse, ParseError } from "../parser.js";
+import type { Expression, Program, Statement } from "../ast.js";
 
 // helpers ---------------------------------------------------------------------
 
@@ -11,7 +11,7 @@ function ast(source: string): Program {
 }
 
 function first(source: string): Statement {
-  const statement = ast(source).body[0];
+  const [statement] = ast(source).body;
   assert.ok(statement, "expected at least one statement");
   return statement;
 }
@@ -614,6 +614,30 @@ describe("statement termination", () => {
 
   test("stray semicolons are tolerated", () => {
     assert.equal(ast(";;let a = 1;;").body.length, 1);
+  });
+
+  // the single line rule is scoped to match arms, where the next line starts a
+  // new pattern. elsewhere a binary operator still continues the expression.
+  test("a binary operator continues across a newline outside a match", () => {
+    assert.equal(ast("let a = b\n- 1").body.length, 1);
+    assert.equal(ast("let a = b +\n c").body.length, 1);
+  });
+
+  test("a leading minus starts the next arm rather than subtracting", () => {
+    const statement: any = first('let m = match x {\n 1 -> "a"\n -1 -> "n"\n}');
+    assert.equal(statement.value.arms.length, 2);
+    assert.equal(statement.value.arms[1].pattern.value, -1);
+  });
+
+  test("a match arm body may still contain binary operators", () => {
+    const statement: any = first("let m = match x {\n 1 -> a + b\n 2 -> c\n}");
+    assert.equal(statement.value.arms.length, 2);
+    assert.equal(sexp(statement.value.arms[0].body), "(a + b)");
+  });
+
+  test("delimiters lift the single line rule", () => {
+    assert.equal(ast("f(\n  a + b,\n  c\n)").body.length, 1);
+    assert.equal(ast("let xs = [\n 1,\n 2\n]").body.length, 1);
   });
 
   test("an empty program has no statements", () => {

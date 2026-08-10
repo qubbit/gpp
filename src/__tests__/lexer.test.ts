@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import { Lexer, LexError, TokenType, type Token } from "../lexer";
+import { Lexer, LexError, TokenType, type Token } from "../lexer.js";
 
 // helpers ---------------------------------------------------------------------
 
