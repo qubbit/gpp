@@ -46,7 +46,7 @@ let {a} = zz // a = 1
 
 let obj = { a }
 
-const x = match some_function(obj) {
+let matched = match some_function(obj) {
   [1,2] -> "success"
   [3,4] -> "fail"
 }
@@ -73,8 +73,6 @@ export z, zz
 `;
 
 let p = "let z = (x) + y * 4";
-const tokens = lexer.lex(s2.trim());
-const tokens2 = lexer.lex("let a = 4");
 
-console.log("tokens", tokens);
-console.log("tokens2", tokens2);
+const program = parse(lexer.lex(s2.trim()));
+console.log(JSON.stringify(program, null, 2));
