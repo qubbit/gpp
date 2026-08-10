@@ -1,6 +1,6 @@
 // runtime values and scope handling for the tree-walk interpreter.
 
-import type { BlockStatement, Parameter, Expression } from "./ast.js";
+import type { BlockStatement, Parameter } from "./ast.js";
 
 export type Value =
   | number
