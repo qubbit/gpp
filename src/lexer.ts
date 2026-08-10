@@ -72,7 +72,8 @@ const SINGLE_CHAR_TOKENS: Record<string, TokenType> = {
 const TWO_CHAR_OPERATORS = ["||", "&&", ">=", "<=", "==", "!="];
 // also checked before single-character operators, so `+=` never lexes as `+` then `=`.
 const COMPOUND_ASSIGNMENTS = ["+=", "-=", "*=", "/=", "%="];
-const SINGLE_CHAR_OPERATORS = ["+", "-", "*", "/", "%", ">", "<", "!"];
+// `|` also separates the members of a union type; the parser reads it by lexeme.
+const SINGLE_CHAR_OPERATORS = ["+", "-", "*", "/", "%", ">", "<", "!", "|", "&"];
 
 export interface Token {
   type: TokenType;

@@ -4,14 +4,15 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "tsx --test src/__tests__/*.test.ts",
+    "test:watch": "tsx --test --watch src/__tests__/*.test.ts",
     "interpreter": "tsx src/interpreter.ts",
     "typecheck": "tsc"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "devDependencies": {
     "@types/node": "^26.2.0",
     "tsx": "^4.23.11",

@@ -1,4 +1,4 @@
-import { TokenType, type Token } from "./lexer";
+import { TokenType, type Token } from "./lexer.js";
 import type {
   ArrayLiteral,
   ArrayPattern,
@@ -25,7 +25,7 @@ import type {
   Statement,
   TypeField,
   TypeNode,
-} from "./ast";
+} from "./ast.js";
 
 export class ParseError extends Error {
   constructor(
@@ -79,6 +79,9 @@ export class Parser {
   // object literal. set for the header expressions of if/while/for/match, whose
   // `{` opens a body.
   private noBrace = false;
+  // while true an expression cannot be continued by an operator on a later
+  // line. set for match arm bodies, where the next line starts a new arm.
+  private singleLine = false;
 
   public parse(tokens: Token[]): Program {
     this.tokens = tokens;
@@ -518,9 +521,30 @@ export class Parser {
     }
   }
 
-  /** parses a nested expression with the no-brace rule lifted. */
+  /**
+   * parses an expression nested inside a delimiter, where both the no-brace and
+   * single-line rules are lifted: the closing delimiter marks the end, so an
+   * argument or element may span lines and contain object literals.
+   */
   private parseNestedExpression(): Expression {
-    return this.withNoBrace(false, () => this.parseExpression());
+    const previousSingleLine = this.singleLine;
+    this.singleLine = false;
+    try {
+      return this.withNoBrace(false, () => this.parseExpression());
+    } finally {
+      this.singleLine = previousSingleLine;
+    }
+  }
+
+  /** parses a match arm body, which ends at the newline before the next arm. */
+  private parseArmBody(): Expression {
+    const previousSingleLine = this.singleLine;
+    this.singleLine = true;
+    try {
+      return this.withNoBrace(false, () => this.parseExpression());
+    } finally {
+      this.singleLine = previousSingleLine;
+    }
   }
 
   /**
@@ -534,6 +558,10 @@ export class Parser {
       const operator = this.peek().lexeme;
       const precedence = BINARY_PRECEDENCE[operator];
       if (precedence === undefined || precedence < minPrecedence) break;
+
+      // inside a match body a leading `-` on the next line starts the next
+      // arm's pattern, so the operator must not continue this expression.
+      if (this.singleLine && this.peek().line > this.peek(-1).line) break;
 
       this.advance();
       // all binary operators here are left-associative, so the right operand
@@ -800,7 +828,7 @@ export class Parser {
       this.expect(TokenType.Arrow, "after a match pattern");
       const body = this.check(TokenType.LBrace)
         ? this.parseBlock()
-        : this.parseNestedExpression();
+        : this.parseArmBody();
 
       arms.push({
         pattern,

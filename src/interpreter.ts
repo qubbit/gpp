@@ -1,5 +1,5 @@
-import parse from "./parser";
-import { Lexer } from "./lexer";
+import parse from "./parser.js";
+import { Lexer } from "./lexer.js";
 
 const lexer = new Lexer();
 
