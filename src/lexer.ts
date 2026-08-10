@@ -4,7 +4,7 @@ export enum TokenType {
   Number = "number",
   String = "string",
   Assignment = "=",
-  // Compound assignment (+=, -=, *=, /=); the operator is kept in `value`.
+  // compound assignment (+=, -=, *=, /=); the operator is kept in `value`.
   CompoundAssignment = "compound_assign",
   Arrow = "->",
   Dot = ".",
@@ -68,9 +68,9 @@ const SINGLE_CHAR_TOKENS: Record<string, TokenType> = {
   ",": TokenType.Comma,
 };
 
-// Checked before the single-character operators so that `>=` never lexes as `>` then `=`.
+// checked before the single-character operators so that `>=` never lexes as `>` then `=`.
 const TWO_CHAR_OPERATORS = ["||", "&&", ">=", "<=", "==", "!="];
-// Also checked before single-character operators, so `+=` never lexes as `+` then `=`.
+// also checked before single-character operators, so `+=` never lexes as `+` then `=`.
 const COMPOUND_ASSIGNMENTS = ["+=", "-=", "*=", "/=", "%="];
 const SINGLE_CHAR_OPERATORS = ["+", "-", "*", "/", "%", ">", "<", "!"];
 
@@ -97,10 +97,10 @@ export class Lexer {
   private source = "";
   private tokens: Token[] = [];
   private cursor = 0;
-  // Start of the token currently being scanned, used to slice its lexeme.
+  // start of the token currently being scanned, used to slice its lexeme.
   private start = 0;
   private line = 1;
-  // Offset of the current line's first character, so column = cursor - lineStart + 1.
+  // offset of the current line's first character, so column = cursor - lineStart + 1.
   private lineStart = 0;
 
   public lex(source: string): Token[] {
@@ -118,12 +118,12 @@ export class Lexer {
 
   // --- primitives -----------------------------------------------------------
 
-  /** The character at the cursor without consuming it; "" past the end. */
+  /** the character at the cursor without consuming it; "" past the end. */
   private peek(offset = 0): string {
     return this.source[this.cursor + offset] ?? "";
   }
 
-  /** Consumes and returns the character at the cursor, tracking line/column. */
+  /** consumes and returns the character at the cursor, tracking line/column. */
   private advance(): string {
     const c = this.peek();
     this.cursor++;
@@ -134,7 +134,7 @@ export class Lexer {
     return c;
   }
 
-  /** Consumes `expected` only if it is next; reports whether it was consumed. */
+  /** consumes `expected` only if it is next; reports whether it was consumed. */
   private match(expected: string): boolean {
     if (this.source.startsWith(expected, this.cursor)) {
       for (let i = 0; i < expected.length; i++) this.advance();
@@ -143,7 +143,7 @@ export class Lexer {
     return false;
   }
 
-  /** Consumes characters while `predicate` holds, returning how many were eaten. */
+  /** consumes characters while `predicate` holds, returning how many were eaten. */
   private advanceWhile(predicate: (c: string) => boolean): number {
     const from = this.cursor;
     while (!this.isAtEnd() && predicate(this.peek())) this.advance();
@@ -180,7 +180,7 @@ export class Lexer {
   // --- scanners -------------------------------------------------------------
 
   private scanToken(): void {
-    // Comments first: `//` must win over the `/` binary operator.
+    // comments first: `//` must win over the `/` binary operator.
     if (this.match("//")) {
       this.advanceWhile((c) => c !== "\n");
       return;
@@ -235,7 +235,7 @@ export class Lexer {
       return;
     }
 
-    // Always consume, so an unknown character can never spin the loop forever.
+    // always consume, so an unknown character can never spin the loop forever.
     this.advance();
     throw this.error(`Unexpected character '${c}'`);
   }
@@ -243,7 +243,7 @@ export class Lexer {
   private scanNumber(): void {
     this.advanceWhile(isDigit);
 
-    // A single fractional part only; a second '.' ends the number and will be
+    // a single fractional part only; a second '.' ends the number and will be
     // reported on its own rather than folded into an unparseable lexeme.
     if (this.peek() === "." && isDigit(this.peek(1))) {
       this.advance();
