@@ -69,7 +69,7 @@ export interface WildcardPattern extends Position {
 
 export interface LiteralPattern extends Position {
   kind: "literal_pattern";
-  value: number | string | boolean;
+  value: number | string | boolean | null;
 }
 
 // a bare identifier in pattern position binds whatever it matches.
@@ -105,6 +105,7 @@ export type Expression =
   | NumberLiteral
   | StringLiteral
   | BooleanLiteral
+  | NullLiteral
   | Identifier
   | ArrayLiteral
   | ObjectLiteral
@@ -130,6 +131,10 @@ export interface StringLiteral extends Position {
 export interface BooleanLiteral extends Position {
   kind: "boolean_literal";
   value: boolean;
+}
+
+export interface NullLiteral extends Position {
+  kind: "null_literal";
 }
 
 export interface Identifier extends Position {

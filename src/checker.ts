@@ -720,6 +720,9 @@ export class Checker {
       case "boolean_literal":
         return BOOL;
 
+      case "null_literal":
+        return NULL;
+
       case "identifier": {
         const type = scope.lookup(expression.name);
         if (!type) {

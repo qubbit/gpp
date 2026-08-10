@@ -63,6 +63,40 @@ describe("literals and operators", () => {
   });
 
   // only false and null are falsy, so 0 and "" stay truthy
+  test("null is a literal", () => {
+    assert.equal(prints("print(null)"), "null");
+    assert.equal(prints("print(type(null))"), "null");
+  });
+
+  test("a missing key compares equal to null", () => {
+    assert.equal(prints('let m = {}\nprint(m["x"] == null)'), "true");
+    assert.equal(prints('let m = {a: 1}\nprint(m["a"] != null)'), "true");
+  });
+
+  // the reason the literal exists: a truthiness check would recompute a
+  // cached 0, a comparison against null does not
+  test("comparing against null distinguishes absent from falsy", () => {
+    assert.equal(
+      prints('let m = {}\nm["a"] = 0\nif m["a"] != null {\n print("cached")\n}'),
+      "cached",
+    );
+  });
+
+  test("null matches a null pattern", () => {
+    assert.equal(
+      prints('print(match null {\n null -> "is null"\n _ -> "other"\n})'),
+      "is null",
+    );
+    assert.equal(
+      prints('print(match 1 {\n null -> "is null"\n _ -> "other"\n})'),
+      "other",
+    );
+  });
+
+  test("null survives inside collections", () => {
+    assert.equal(prints("print([1, null, 3])"), "[1, null, 3]");
+  });
+
   test("truthiness covers only false and null", () => {
     assert.equal(prints("print(!0)"), "false");
     assert.equal(prints('print(!"")'), "false");

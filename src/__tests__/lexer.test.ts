@@ -139,6 +139,12 @@ describe("literals", () => {
   test("booleans are keywords, not identifiers", () => {
     assert.deepEqual(types("true false"), [TokenType.True, TokenType.False]);
   });
+
+  test("null is a keyword, not an identifier", () => {
+    assert.deepEqual(types("null"), [TokenType.Null]);
+    // a word merely starting with it is still an identifier
+    assert.deepEqual(types("nullable"), [TokenType.Identifier]);
+  });
 });
 
 describe("identifiers and keywords", () => {
@@ -155,6 +161,7 @@ describe("identifiers and keywords", () => {
       ["return", TokenType.Return],
       ["true", TokenType.True],
       ["false", TokenType.False],
+      ["null", TokenType.Null],
       ["from", TokenType.From],
       ["import", TokenType.Import],
       ["export", TokenType.Export],

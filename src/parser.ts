@@ -708,6 +708,14 @@ export class Parser {
           column: token.column,
         };
 
+      case TokenType.Null:
+        this.advance();
+        return {
+          kind: "null_literal",
+          line: token.line,
+          column: token.column,
+        };
+
       case TokenType.Identifier:
         this.advance();
         return {
@@ -896,6 +904,15 @@ export class Parser {
         return {
           kind: "literal_pattern",
           value: token.type === TokenType.True,
+          line: token.line,
+          column: token.column,
+        };
+
+      case TokenType.Null:
+        this.advance();
+        return {
+          kind: "literal_pattern",
+          value: null,
           line: token.line,
           column: token.column,
         };
@@ -1117,7 +1134,9 @@ export class Parser {
       };
     }
 
-    if (this.check(TokenType.Identifier)) {
+    // `null` is a keyword rather than an identifier, but it names a type too,
+    // which is what makes `number | null` writable
+    if (this.check(TokenType.Identifier) || this.check(TokenType.Null)) {
       this.advance();
       return {
         kind: "named_type",
