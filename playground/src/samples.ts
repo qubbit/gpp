@@ -311,6 +311,60 @@ for line in triangle(5) {
 }
 `,
   },
+
+  {
+    id: "memo",
+    name: "Memoisation",
+    description: "Caching results in an object across calls",
+    source: `// an object declared outside a function keeps its contents between
+// calls, which is all a memo table needs.
+
+let memo = {}
+
+fn fib(n) {
+  if n < 2 {
+    return n
+  }
+
+  let key = str(n)
+  // a missing key reads as null, which is falsy. gpp has no null literal
+  // to compare against, so the truthiness check stands in for one.
+  if memo[key] {
+    return memo[key]
+  }
+
+  // the recursive call is what fills the table. without it every lookup
+  // misses, and null + null is an error rather than a number.
+  let v = fib(n - 1) + fib(n - 2)
+  memo[key] = v
+  return v
+}
+
+print(fib(10))
+print(fib(30))
+print("memoised", len(keys(memo)), "values")
+
+// the same shape works for any pure function. count the calls to see
+// how much work the cache saves.
+let squares = {}
+let computed = 0
+
+fn slow_square(n) {
+  let key = str(n)
+  if squares[key] {
+    return squares[key]
+  }
+  computed += 1
+  squares[key] = n * n
+  return squares[key]
+}
+
+for n in [4, 4, 7, 4, 7, 9] {
+  print(n, "squared is", slow_square(n))
+}
+print("computed", computed, "of 6 lookups")
+`,
+  },
 ];
 
 export const DEFAULT_SAMPLE = SAMPLES[0]!;

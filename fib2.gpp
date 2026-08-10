@@ -1,0 +1,28 @@
+// memoised fibonacci.
+//
+// the table only fills if the function calls itself: without the recursive
+// call the lookups below read keys nothing ever wrote, and a missing key is
+// null, so `null + null` fails.
+
+let memo = {}
+
+fn fib2(n) {
+  if n < 2 {
+    return n
+  }
+
+  let key = str(n)
+  // a missing key reads as null, which is falsy. gpp has no null literal to
+  // compare against, so the truthiness check stands in for one.
+  if memo[key] {
+    return memo[key]
+  }
+
+  let v = fib2(n - 1) + fib2(n - 2)
+  memo[key] = v
+  return v
+}
+
+print(fib2(10))
+print(fib2(30))
+print("memoised", len(keys(memo)), "values")
