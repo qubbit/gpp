@@ -41,5 +41,9 @@
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true,
-  }
+  },
+
+  // only the language core. the playground has its own tsconfig with the
+  // settings vite needs, and is checked by its own build.
+  "include": ["src"]
 }

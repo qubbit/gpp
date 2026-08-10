@@ -1,0 +1,86 @@
+name: Deploy playground
+
+on:
+  push:
+    branches: [main]
+  # allows a deploy to be triggered by hand from the Actions tab
+  workflow_dispatch:
+
+# GITHUB_TOKEN needs these to publish to Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# let a running deploy finish rather than cancelling it, but only queue one
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install language core dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+  build:
+    name: Build
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: playground/package-lock.json
+
+      - name: Install playground dependencies
+        working-directory: playground
+        run: npm ci
+
+      - name: Build
+        working-directory: playground
+        # the site lives at /<repo>/, so the asset base has to match
+        env:
+          GPP_BASE: /${{ github.event.repository.name }}/
+        run: npm run build
+
+      - name: Add a 404 that serves the app
+        working-directory: playground
+        # pages serves 404.html for unknown paths; reusing index.html keeps a
+        # deep link working instead of showing github's error page
+        run: cp dist/index.html dist/404.html
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: playground/dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
