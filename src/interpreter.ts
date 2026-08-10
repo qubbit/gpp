@@ -26,6 +26,14 @@ return double(x * x)
 let s2 = `let x = 10
 let y = x + 20
 
+let zz = {a: 1, b: "hello", c: []}
+
+zz["a"] = 5
+
+f += 1
+
+let z = [1,2,3,4, [1]]
+
 if (y > 20) {
   y = y * 2
 }`;

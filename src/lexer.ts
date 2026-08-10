@@ -13,10 +13,13 @@ export enum TokenType {
   Break = "break",
   For = "for",
   Return = "return",
+  Colon = ":",
   LParen = "(",
   RParen = ")",
   LBrace = "{",
   RBrace = "}",
+  LBracket = "[",
+  RBracket = "]",
   Comma = ",",
   True = "true",
   False = "false",
@@ -38,10 +41,13 @@ const KEYWORDS: Record<string, TokenType> = {
 };
 
 const SINGLE_CHAR_TOKENS: Record<string, TokenType> = {
+  ":": TokenType.Colon,
   "(": TokenType.LParen,
   ")": TokenType.RParen,
   "{": TokenType.LBrace,
   "}": TokenType.RBrace,
+  "[": TokenType.LBracket,
+  "]": TokenType.RBracket,
   ",": TokenType.Comma,
 };
 
