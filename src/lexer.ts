@@ -118,7 +118,7 @@ export class Lexer {
 
       if ([">", "<", "!", "|", "&", "="].includes(c)) {
         const twoCharOperator = source.slice(cursor, cursor + 2);
-        if (["||", "&&", ">=", "<=", "=="].includes(twoCharOperator)) {
+        if (["||", "&&", ">=", "<=", "==", "!="].includes(twoCharOperator)) {
           cursor += 2;
           this.tokens.push({
             type: TokenType.BinaryOperator,
@@ -156,9 +156,10 @@ export class Lexer {
           c = source[++cursor];
         }
         if (identifier) {
-          if (Object.keys(KEYWORDS).includes(identifier)) {
+          const keyword = KEYWORDS[identifier];
+          if (keyword) {
             this.tokens.push({
-              type: identifier as TokenType,
+              type: keyword,
               value: identifier,
               lexeme: identifier,
             });
