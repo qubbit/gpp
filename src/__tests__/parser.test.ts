@@ -578,6 +578,22 @@ describe("brace disambiguation", () => {
     assert.equal(first("{\n let x = 1\n}").kind, "block_statement");
   });
 
+  // a `{` in the first position of a header cannot be the body brace, because
+  // the body cannot precede the header
+  test("an object literal may open a header", () => {
+    const match: any = first('let m = match {p: 1} {\n {p} -> p\n}');
+    assert.equal(match.value.subject.kind, "object_literal");
+
+    const loop: any = first("for k in {a: 1} {\n print(k)\n}");
+    assert.equal(loop.iterable.kind, "object_literal");
+  });
+
+  test("an object opening a header can still be an operand", () => {
+    const statement: any = first('if {a: 1} == other {\n x = 1\n}');
+    assert.equal(statement.condition.kind, "binary_expression");
+    assert.equal(statement.condition.left.kind, "object_literal");
+  });
+
   test("a match subject does not absorb the arms", () => {
     const statement: any = first('let a = match f(x) {\n 1 -> "a"\n}');
     assert.equal(statement.value.kind, "match_expression");

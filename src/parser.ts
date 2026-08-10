@@ -501,8 +501,16 @@ export class Parser {
    * parses a header expression, where a following `{` opens a body rather than
    * an object literal. `if x {`, `match f(x) {` and friends rely on this;
    * parenthesising the header still allows an object literal inside.
+   *
+   * a `{` in the very first position is unambiguous: the body brace cannot come
+   * before the header, so it must open an object literal.
    */
   private parseHeaderExpression(): Expression {
+    if (this.check(TokenType.LBrace)) {
+      const object = this.withNoBrace(false, () => this.parseObjectLiteral());
+      // the object may still be the left side of a larger header expression
+      return this.withNoBrace(true, () => this.parseBinaryFrom(object, 0));
+    }
     return this.withNoBrace(true, () => this.parseExpression());
   }
 
@@ -552,7 +560,15 @@ export class Parser {
    * that bind at least as tightly as `minPrecedence`.
    */
   private parseBinary(minPrecedence: number): Expression {
-    let left = this.parseUnary();
+    return this.parseBinaryFrom(this.parseUnary(), minPrecedence);
+  }
+
+  /** continues a binary expression from an already parsed left operand. */
+  private parseBinaryFrom(
+    initial: Expression,
+    minPrecedence: number,
+  ): Expression {
+    let left = initial;
 
     while (this.check(TokenType.BinaryOperator)) {
       const operator = this.peek().lexeme;
