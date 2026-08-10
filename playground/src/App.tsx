@@ -8,7 +8,7 @@ import { AstView } from "./AstView";
 import { DEFAULT_SAMPLE, SAMPLES } from "./samples";
 import { buildShareUrl, readSourceFromUrl, updateUrl } from "./share";
 
-type RightPane = "output" | "ast";
+type RightPane = "output" | "ast" | "types";
 type Theme = "light" | "dark";
 
 const THEME_KEY = "gpp-playground-theme";
@@ -88,7 +88,7 @@ export default function App() {
     registerGppLanguage(monaco);
   };
 
-  // surface lex and parse errors as squiggles on the offending line
+  // surface lex, parse and type errors as squiggles on the offending line
   useEffect(() => {
     const monaco = monacoRef.current;
     const editor = editorRef.current;
@@ -97,20 +97,31 @@ export default function App() {
     const model = editor.getModel();
     if (!model) return;
 
+    const markers: monacoTypes.editor.IMarkerData[] = [];
+
     const error = result?.error;
-    const markers: monacoTypes.editor.IMarkerData[] =
-      error && error.line > 0
-        ? [
-            {
-              severity: monaco.MarkerSeverity.Error,
-              message: error.message,
-              startLineNumber: error.line,
-              startColumn: error.column,
-              endLineNumber: error.line,
-              endColumn: error.column + 1,
-            },
-          ]
-        : [];
+    if (error && error.line > 0) {
+      markers.push({
+        severity: monaco.MarkerSeverity.Error,
+        message: error.message,
+        startLineNumber: error.line,
+        startColumn: error.column,
+        endLineNumber: error.line,
+        endColumn: error.column + 1,
+      });
+    }
+
+    // type errors are advisory, so they show as warnings rather than errors
+    for (const typeError of result?.typeErrors ?? []) {
+      markers.push({
+        severity: monaco.MarkerSeverity.Warning,
+        message: typeError.message,
+        startLineNumber: typeError.line,
+        startColumn: typeError.column,
+        endLineNumber: typeError.line,
+        endColumn: typeError.column + 1,
+      });
+    }
 
     monaco.editor.setModelMarkers(model, LANGUAGE_ID, markers);
   }, [result]);
@@ -149,6 +160,8 @@ export default function App() {
     () => SAMPLES.find((item) => item.id === sampleId),
     [sampleId],
   );
+
+  const typeErrorCount = result?.typeErrors.length ?? 0;
 
   return (
     <div className="app">
@@ -232,7 +245,11 @@ export default function App() {
         <section className="pane">
           <div className="pane-header">
             <span className="pane-title">
-              {pane === "output" ? "Output" : "Syntax tree"}
+              {pane === "output"
+                ? "Output"
+                : pane === "ast"
+                  ? "Syntax tree"
+                  : "Types"}
             </span>
             <div className="tabs" role="tablist">
               <button
@@ -251,12 +268,25 @@ export default function App() {
               >
                 AST
               </button>
+              <button
+                className="tab"
+                role="tab"
+                aria-selected={pane === "types"}
+                onClick={() => setPane("types")}
+              >
+                Types
+                {typeErrorCount > 0 && (
+                  <span className="tab-badge">{typeErrorCount}</span>
+                )}
+              </button>
             </div>
           </div>
 
           <div className="pane-body">
             {pane === "output" ? (
               <OutputPane result={result} />
+            ) : pane === "types" ? (
+              <TypesPane result={result} onSelect={revealPosition} />
             ) : result?.ast ? (
               <AstView node={result.ast} onSelect={revealPosition} />
             ) : (
@@ -309,6 +339,56 @@ function OutputPane({ result }: { result: ExecuteResult | null }) {
   );
 }
 
+function TypesPane({
+  result,
+  onSelect,
+}: {
+  result: ExecuteResult | null;
+  onSelect: (line: number, column: number) => void;
+}) {
+  if (!result) {
+    return <p className="placeholder">Press Run to check the program.</p>;
+  }
+
+  if (!result.ast) {
+    return (
+      <p className="placeholder">
+        The program did not parse, so it could not be checked.
+      </p>
+    );
+  }
+
+  if (result.typeErrors.length === 0) {
+    return (
+      <p className="placeholder">
+        No type errors.
+        <br />
+        <span className="placeholder-hint">
+          gpp is gradually typed: add annotations to check more.
+        </span>
+      </p>
+    );
+  }
+
+  return (
+    <ul className="type-errors">
+      {result.typeErrors.map((error, index) => (
+        <li key={index}>
+          <button
+            className="type-error"
+            onClick={() => onSelect(error.line, error.column)}
+          >
+            <span className="type-error-position">
+              {error.line}:{error.column}
+            </span>
+            <span>{error.message}</span>
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function StatusBar({ result }: { result: ExecuteResult | null }) {
   if (!result) return <div className="status">Ready</div>;
 
@@ -320,6 +400,12 @@ function StatusBar({ result }: { result: ExecuteResult | null }) {
       <span>
         {result.output.length} line{result.output.length === 1 ? "" : "s"}
       </span>
+      {result.typeErrors.length > 0 && (
+        <span className="warn">
+          {result.typeErrors.length} type{" "}
+          {result.typeErrors.length === 1 ? "error" : "errors"}
+        </span>
+      )}
       {result.ast && <span>{result.ast.body.length} statements</span>}
     </div>
   );

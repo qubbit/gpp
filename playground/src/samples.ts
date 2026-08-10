@@ -211,6 +211,54 @@ for value in samples {
   },
 
   {
+    id: "types",
+    name: "Types",
+    description: "Gradual checking — open the Types tab",
+    source: `// gpp is gradually typed. code without annotations is never
+// rejected, and adding them buys you checking.
+
+// inferred from the initialiser, then checked on reassignment
+let count = 10
+// count = "ten"     // uncomment: cannot assign string to number
+
+// an unannotated parameter is any, so this stays flexible
+fn describe(value) {
+  return str(value)
+}
+print(describe(1), describe("two"), describe(true))
+
+// annotate, and the call site is checked
+fn twice(n: number): number {
+  return n * 2
+}
+print(twice(21))
+// twice("nope")     // uncomment: cannot pass string as argument 1
+
+// interfaces are structural: any object with the right shape fits,
+// and extra fields are fine
+interface Point {
+  x: number
+  y: number
+  label?: string
+}
+
+fn magnitude(p: Point): number {
+  return sqrt(p.x * p.x + p.y * p.y)
+}
+
+print(magnitude({x: 3, y: 4}))
+print(magnitude({x: 6, y: 8, label: "far", extra: true}))
+// magnitude({x: 1})  // uncomment: missing 'y' required by Point
+
+// objects are open records, so building one up is fine
+let totals = {}
+totals.count = count
+totals.mean = count / 2
+print(totals)
+`,
+  },
+
+  {
     id: "algorithms",
     name: "Algorithms",
     description: "Recursion and while loops",

@@ -45,6 +45,17 @@ describe("playground samples", () => {
       assert.ok(result.ast, `${sample.id} produced no ast`);
       assert.ok(result.ast!.body.length > 0);
     });
+
+    // gradual typing means a sample should never show a type warning, since
+    // that is what a reader would take as the language rejecting normal code
+    test(`${sample.id} has no type errors`, () => {
+      const result = execute(sample.source);
+      assert.deepEqual(
+        result.typeErrors.map((e) => `${e.line}:${e.column} ${e.message}`),
+        [],
+        `${sample.id} produced type errors`,
+      );
+    });
   }
 });
 
