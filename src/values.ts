@@ -52,7 +52,8 @@ export function isObject(value: Value): value is ObjectValue {
 
 /** the name gpp's `type` builtin reports for a value. */
 export function typeName(value: Value): string {
-  if (value === null) return "null";
+  // the language calls it nil; the host representation is javascript null
+  if (value === null) return "nil";
   if (Array.isArray(value)) return "array";
   if (isCallable(value)) return "function";
   switch (typeof value) {
@@ -72,7 +73,7 @@ export function typeName(value: Value): string {
  * shown structurally so `print` on a collection is useful.
  */
 export function stringify(value: Value, seen = new Set<object>()): string {
-  if (value === null) return "null";
+  if (value === null) return "nil";
   if (typeof value === "string") return value;
   if (typeof value === "number" || typeof value === "boolean") return String(value);
 

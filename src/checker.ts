@@ -22,7 +22,7 @@ import {
   ANY,
   BOOL,
   NEVER,
-  NULL,
+  NIL,
   NUMBER,
   STRING,
   VOID,
@@ -232,8 +232,8 @@ export class Checker {
             return ANY;
           case "void":
             return VOID;
-          case "null":
-            return NULL;
+          case "nil":
+            return NIL;
           case "never":
             return NEVER;
         }
@@ -720,8 +720,8 @@ export class Checker {
       case "boolean_literal":
         return BOOL;
 
-      case "null_literal":
-        return NULL;
+      case "nil_literal":
+        return NIL;
 
       case "identifier": {
         const type = scope.lookup(expression.name);
@@ -911,7 +911,7 @@ export class Checker {
         return ANY;
       }
       // an optional field may be absent at runtime
-      return field.optional ? unionOf([field.type, NULL]) : field.type;
+      return field.optional ? unionOf([field.type, NIL]) : field.type;
     }
 
     this.report(
@@ -986,7 +986,7 @@ export class Checker {
     if (arm.body.kind === "block_statement") {
       this.checkBlock(arm.body, new Scope(armScope));
       // a block bodied arm yields null unless it returns
-      return NULL;
+      return NIL;
     }
 
     return this.checkExpression(arm.body, armScope, expected);

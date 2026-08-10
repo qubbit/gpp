@@ -708,10 +708,10 @@ export class Parser {
           column: token.column,
         };
 
-      case TokenType.Null:
+      case TokenType.Nil:
         this.advance();
         return {
-          kind: "null_literal",
+          kind: "nil_literal",
           line: token.line,
           column: token.column,
         };
@@ -908,7 +908,7 @@ export class Parser {
           column: token.column,
         };
 
-      case TokenType.Null:
+      case TokenType.Nil:
         this.advance();
         return {
           kind: "literal_pattern",
@@ -1134,9 +1134,9 @@ export class Parser {
       };
     }
 
-    // `null` is a keyword rather than an identifier, but it names a type too,
-    // which is what makes `number | null` writable
-    if (this.check(TokenType.Identifier) || this.check(TokenType.Null)) {
+    // `nil` is a keyword rather than an identifier, but it names a type too,
+    // which is what makes `number | nil` writable
+    if (this.check(TokenType.Identifier) || this.check(TokenType.Nil)) {
       this.advance();
       return {
         kind: "named_type",

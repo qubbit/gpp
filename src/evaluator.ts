@@ -369,7 +369,7 @@ export class Evaluator {
       case "boolean_literal":
         return expression.value;
 
-      case "null_literal":
+      case "nil_literal":
         return null;
 
       case "identifier":

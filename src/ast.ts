@@ -105,7 +105,7 @@ export type Expression =
   | NumberLiteral
   | StringLiteral
   | BooleanLiteral
-  | NullLiteral
+  | NilLiteral
   | Identifier
   | ArrayLiteral
   | ObjectLiteral
@@ -133,8 +133,8 @@ export interface BooleanLiteral extends Position {
   value: boolean;
 }
 
-export interface NullLiteral extends Position {
-  kind: "null_literal";
+export interface NilLiteral extends Position {
+  kind: "nil_literal";
 }
 
 export interface Identifier extends Position {

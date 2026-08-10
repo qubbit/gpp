@@ -329,7 +329,7 @@ fn fib(n) {
   let key = str(n)
   // a missing key reads as null. comparing against it rather than testing
   // truthiness keeps a cached 0 or false from being recomputed.
-  if memo[key] != null {
+  if memo[key] != nil {
     return memo[key]
   }
 
@@ -351,7 +351,7 @@ let computed = 0
 
 fn slow_square(n) {
   let key = str(n)
-  if squares[key] != null {
+  if squares[key] != nil {
     return squares[key]
   }
   computed += 1

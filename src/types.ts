@@ -27,7 +27,7 @@ export interface NeverType {
 
 export interface PrimitiveType {
   kind: "primitive";
-  name: "number" | "string" | "bool" | "null" | "void";
+  name: "number" | "string" | "bool" | "nil" | "void";
 }
 
 export interface ArrayTypeInfo {
@@ -68,7 +68,7 @@ export const NEVER: NeverType = { kind: "never" };
 export const NUMBER: PrimitiveType = { kind: "primitive", name: "number" };
 export const STRING: PrimitiveType = { kind: "primitive", name: "string" };
 export const BOOL: PrimitiveType = { kind: "primitive", name: "bool" };
-export const NULL: PrimitiveType = { kind: "primitive", name: "null" };
+export const NIL: PrimitiveType = { kind: "primitive", name: "nil" };
 export const VOID: PrimitiveType = { kind: "primitive", name: "void" };
 
 export function arrayOf(element: Type): ArrayTypeInfo {

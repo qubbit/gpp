@@ -449,25 +449,25 @@ describe("modules and the prelude", () => {
   });
 });
 
-describe("null", () => {
-  test("the literal has type null", () => {
-    rejects("let n: number = null", /Cannot assign null to number/);
+describe("nil", () => {
+  test("the literal has type nil", () => {
+    rejects("let n: number = nil", /Cannot assign nil to number/);
   });
 
-  test("null is writable as a type", () => {
-    clean("let x: null = null");
+  test("nil is writable as a type", () => {
+    clean("let x: nil = nil");
   });
 
-  test("a nullable union accepts either side", () => {
-    clean("let x: number | null = null\nx = 5");
-    rejects('let x: number | null = "s"', /Cannot assign string/);
+  test("a nilable union accepts either side", () => {
+    clean("let x: number | nil = nil\nx = 5");
+    rejects('let x: number | nil = "s"', /Cannot assign string/);
   });
 
-  test("an optional field reads as nullable", () => {
-    // absent at runtime, so the declared type is widened with null
+  test("an optional field reads as nilable", () => {
+    // absent at runtime, so the declared type is widened with nil
     rejects(
       "interface C {\n debug?: bool\n}\nfn f(c: C) {\n let b: bool = c.debug\n}",
-      /Cannot assign bool \| null to bool/,
+      /Cannot assign bool \| nil to bool/,
     );
   });
 });

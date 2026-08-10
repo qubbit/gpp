@@ -17,7 +17,7 @@ const KEYWORDS = [
   "return",
   "true",
   "false",
-  "null",
+  "nil",
   "from",
   "import",
   "export",

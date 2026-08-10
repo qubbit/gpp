@@ -62,42 +62,41 @@ describe("literals and operators", () => {
     assert.equal(prints("print(!true)"), "false");
   });
 
-  // only false and null are falsy, so 0 and "" stay truthy
-  test("null is a literal", () => {
-    assert.equal(prints("print(null)"), "null");
-    assert.equal(prints("print(type(null))"), "null");
+  test("nil is a literal", () => {
+    assert.equal(prints("print(nil)"), "nil");
+    assert.equal(prints("print(type(nil))"), "nil");
   });
 
-  test("a missing key compares equal to null", () => {
-    assert.equal(prints('let m = {}\nprint(m["x"] == null)'), "true");
-    assert.equal(prints('let m = {a: 1}\nprint(m["a"] != null)'), "true");
+  test("a missing key compares equal to nil", () => {
+    assert.equal(prints('let m = {}\nprint(m["x"] == nil)'), "true");
+    assert.equal(prints('let m = {a: 1}\nprint(m["a"] != nil)'), "true");
   });
 
   // the reason the literal exists: a truthiness check would recompute a
-  // cached 0, a comparison against null does not
-  test("comparing against null distinguishes absent from falsy", () => {
+  // cached 0, a comparison against nil does not
+  test("comparing against nil distinguishes absent from falsy", () => {
     assert.equal(
-      prints('let m = {}\nm["a"] = 0\nif m["a"] != null {\n print("cached")\n}'),
+      prints('let m = {}\nm["a"] = 0\nif m["a"] != nil {\n print("cached")\n}'),
       "cached",
     );
   });
 
-  test("null matches a null pattern", () => {
+  test("nil matches a nil pattern", () => {
     assert.equal(
-      prints('print(match null {\n null -> "is null"\n _ -> "other"\n})'),
-      "is null",
+      prints('print(match nil {\n nil -> "is nil"\n _ -> "other"\n})'),
+      "is nil",
     );
     assert.equal(
-      prints('print(match 1 {\n null -> "is null"\n _ -> "other"\n})'),
+      prints('print(match 1 {\n nil -> "is nil"\n _ -> "other"\n})'),
       "other",
     );
   });
 
-  test("null survives inside collections", () => {
-    assert.equal(prints("print([1, null, 3])"), "[1, null, 3]");
+  test("nil survives inside collections", () => {
+    assert.equal(prints("print([1, nil, 3])"), "[1, nil, 3]");
   });
 
-  test("truthiness covers only false and null", () => {
+  test("truthiness covers only false and nil", () => {
     assert.equal(prints("print(!0)"), "false");
     assert.equal(prints('print(!"")'), "false");
     assert.equal(prints("print(!false)"), "true");
@@ -198,8 +197,8 @@ describe("functions", () => {
     assert.equal(prints("fn double(x) {\n return x * 2\n}\nprint(double(21))"), "42");
   });
 
-  test("a function without a return yields null", () => {
-    assert.equal(prints("fn f() {\n}\nprint(f())"), "null");
+  test("a function without a return yields nil", () => {
+    assert.equal(prints("fn f() {\n}\nprint(f())"), "nil");
   });
 
   test("recursion", () => {
@@ -263,8 +262,8 @@ describe("collections", () => {
     assert.equal(prints('let o = {a: 1}\nprint(o["a"])'), "1");
   });
 
-  test("a missing property reads as null", () => {
-    assert.equal(prints("let o = {}\nprint(o.nope)"), "null");
+  test("a missing property reads as nil", () => {
+    assert.equal(prints("let o = {}\nprint(o.nope)"), "nil");
   });
 
   test("property assignment", () => {

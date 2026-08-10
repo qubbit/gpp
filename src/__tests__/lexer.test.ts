@@ -140,10 +140,10 @@ describe("literals", () => {
     assert.deepEqual(types("true false"), [TokenType.True, TokenType.False]);
   });
 
-  test("null is a keyword, not an identifier", () => {
-    assert.deepEqual(types("null"), [TokenType.Null]);
+  test("nil is a keyword, not an identifier", () => {
+    assert.deepEqual(types("nil"), [TokenType.Nil]);
     // a word merely starting with it is still an identifier
-    assert.deepEqual(types("nullable"), [TokenType.Identifier]);
+    assert.deepEqual(types("nilable"), [TokenType.Identifier]);
   });
 });
 
@@ -161,7 +161,7 @@ describe("identifiers and keywords", () => {
       ["return", TokenType.Return],
       ["true", TokenType.True],
       ["false", TokenType.False],
-      ["null", TokenType.Null],
+      ["nil", TokenType.Nil],
       ["from", TokenType.From],
       ["import", TokenType.Import],
       ["export", TokenType.Export],
