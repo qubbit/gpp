@@ -24,6 +24,11 @@ export enum TokenType {
   True = "true",
   False = "false",
   EOF = "eof",
+  From = "from",
+  Import = "import",
+  Export = "export",
+  Interface = "interface",
+  Match = "match",
 }
 
 const KEYWORDS: Record<string, TokenType> = {
@@ -38,6 +43,11 @@ const KEYWORDS: Record<string, TokenType> = {
   return: TokenType.Return,
   true: TokenType.True,
   false: TokenType.False,
+  from: TokenType.From,
+  import: TokenType.Import,
+  export: TokenType.Export,
+  interface: TokenType.Interface,
+  match: TokenType.Match,
 };
 
 const SINGLE_CHAR_TOKENS: Record<string, TokenType> = {
