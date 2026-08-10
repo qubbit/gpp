@@ -32,6 +32,7 @@ if (y > 20) {
 
 let p = "let z = (x) + y * 4";
 const tokens = lexer.lex(s2.trim());
-// const tokens2 = lexer.lex("let a = 4");
+const tokens2 = lexer.lex("let a = 4");
 
 console.log("tokens", tokens);
+console.log("tokens2", tokens2);

@@ -1,6 +1,6 @@
-enum TokenType {
+export enum TokenType {
   Identifier = "identifier",
-  BinaryOperator = "binary_op", // one of +, -, *, /
+  BinaryOperator = "binary_op", // one of +, -, *, /, and the comparison/logical ops
   Number = "number",
   String = "string",
   Assignment = "=",
@@ -17,8 +17,10 @@ enum TokenType {
   RParen = ")",
   LBrace = "{",
   RBrace = "}",
+  Comma = ",",
   True = "true",
   False = "false",
+  EOF = "eof",
 }
 
 const KEYWORDS: Record<string, TokenType> = {
@@ -35,146 +37,237 @@ const KEYWORDS: Record<string, TokenType> = {
   false: TokenType.False,
 };
 
-interface Token {
+const SINGLE_CHAR_TOKENS: Record<string, TokenType> = {
+  "(": TokenType.LParen,
+  ")": TokenType.RParen,
+  "{": TokenType.LBrace,
+  "}": TokenType.RBrace,
+  ",": TokenType.Comma,
+};
+
+// Checked before the single-character operators so that `>=` never lexes as `>` then `=`.
+const TWO_CHAR_OPERATORS = ["||", "&&", ">=", "<=", "==", "!="];
+const SINGLE_CHAR_OPERATORS = ["+", "-", "*", "/", ">", "<", "!"];
+
+export interface Token {
   type: TokenType;
   lexeme: string;
   value: any;
+  line: number;
+  column: number;
+}
+
+export class LexError extends Error {
+  constructor(
+    message: string,
+    public readonly line: number,
+    public readonly column: number,
+  ) {
+    super(`${message} (line ${line}, column ${column})`);
+    this.name = "LexError";
+  }
 }
 
 export class Lexer {
+  private source = "";
   private tokens: Token[] = [];
-  private cursor: number = 0;
+  private cursor = 0;
+  // Start of the token currently being scanned, used to slice its lexeme.
+  private start = 0;
+  private line = 1;
+  // Offset of the current line's first character, so column = cursor - lineStart + 1.
+  private lineStart = 0;
 
   public lex(source: string): Token[] {
-    let cursor = this.cursor;
-    while (cursor < source.length) {
-      let c = source[cursor];
+    this.reset(source);
 
-      if (source.slice(cursor, cursor + 2) === "//") {
-        cursor += 2;
-
-        while (cursor < source.length && source[cursor] !== "\n") {
-          cursor++;
-        }
-        continue;
-      }
-
-      if (/\s/.test(c)) {
-        cursor++;
-        continue;
-      }
-
-      if (/[0-9]/.test(c)) {
-        const start = cursor;
-        while (cursor < source.length && /[0-9]|\./.test(source[cursor])) {
-          cursor++;
-        }
-        const lexeme = source.slice(start, cursor);
-        this.tokens.push({ type: TokenType.Number, lexeme, value: +lexeme });
-        continue;
-      }
-
-      if ('"' === c) {
-        cursor++;
-
-        const start = cursor;
-        while (cursor < source.length && source[cursor] !== '"') {
-          cursor++;
-        }
-        if (cursor >= source.length) {
-          throw new Error("Unterminated string");
-        }
-        const value = source.slice(start, cursor);
-        cursor++;
-        this.tokens.push({
-          type: TokenType.String,
-          lexeme: source.slice(start - 1, cursor),
-          value,
-        });
-        continue;
-      }
-
-      if ("(" == c) {
-        cursor++;
-        this.tokens.push({ type: TokenType.LParen, value: c, lexeme: c });
-        continue;
-      }
-      if (")" == c) {
-        cursor++;
-        this.tokens.push({ type: TokenType.RParen, value: c, lexeme: c });
-        continue;
-      }
-
-      if ("{" == c) {
-        cursor++;
-        this.tokens.push({ type: TokenType.LBrace, value: c, lexeme: c });
-        continue;
-      }
-      if ("}" == c) {
-        cursor++;
-        this.tokens.push({ type: TokenType.RBrace, value: c, lexeme: c });
-        continue;
-      }
-
-      if ([">", "<", "!", "|", "&", "="].includes(c)) {
-        const twoCharOperator = source.slice(cursor, cursor + 2);
-        if (["||", "&&", ">=", "<=", "==", "!="].includes(twoCharOperator)) {
-          cursor += 2;
-          this.tokens.push({
-            type: TokenType.BinaryOperator,
-            value: twoCharOperator,
-            lexeme: twoCharOperator,
-          });
-        } else if ("=" == c) {
-          cursor++;
-          this.tokens.push({ type: TokenType.Assignment, value: c, lexeme: c });
-        } else {
-          cursor++;
-          this.tokens.push({
-            type: TokenType.BinaryOperator,
-            value: c,
-            lexeme: c,
-          });
-        }
-        continue;
-      }
-
-      if (["+", "-", "*", "/"].includes(c)) {
-        cursor++;
-        this.tokens.push({
-          type: TokenType.BinaryOperator,
-          lexeme: c,
-          value: c,
-        });
-        continue;
-      }
-
-      if (/[_a-zA-Z]/.test(c)) {
-        let identifier = "";
-        while (/\w/.test(c) && cursor < source.length) {
-          identifier += c;
-          c = source[++cursor];
-        }
-        if (identifier) {
-          const keyword = KEYWORDS[identifier];
-          if (keyword) {
-            this.tokens.push({
-              type: keyword,
-              value: identifier,
-              lexeme: identifier,
-            });
-            continue;
-          }
-          this.tokens.push({
-            type: TokenType.Identifier,
-            value: identifier,
-            lexeme: identifier,
-          });
-        }
-      }
-      continue;
+    while (!this.isAtEnd()) {
+      this.start = this.cursor;
+      this.scanToken();
     }
-    this.cursor = cursor;
+
+    this.start = this.cursor;
+    this.addToken(TokenType.EOF, "");
     return this.tokens;
+  }
+
+  // --- primitives -----------------------------------------------------------
+
+  /** The character at the cursor without consuming it; "" past the end. */
+  private peek(offset = 0): string {
+    return this.source[this.cursor + offset] ?? "";
+  }
+
+  /** Consumes and returns the character at the cursor, tracking line/column. */
+  private advance(): string {
+    const c = this.peek();
+    this.cursor++;
+    if (c === "\n") {
+      this.line++;
+      this.lineStart = this.cursor;
+    }
+    return c;
+  }
+
+  /** Consumes `expected` only if it is next; reports whether it was consumed. */
+  private match(expected: string): boolean {
+    if (this.source.startsWith(expected, this.cursor)) {
+      for (let i = 0; i < expected.length; i++) this.advance();
+      return true;
+    }
+    return false;
+  }
+
+  /** Consumes characters while `predicate` holds, returning how many were eaten. */
+  private advanceWhile(predicate: (c: string) => boolean): number {
+    const from = this.cursor;
+    while (!this.isAtEnd() && predicate(this.peek())) this.advance();
+    return this.cursor - from;
+  }
+
+  private isAtEnd(): boolean {
+    return this.cursor >= this.source.length;
+  }
+
+  private addToken(type: TokenType, value: any, lexeme?: string): void {
+    this.tokens.push({
+      type,
+      lexeme: lexeme ?? this.source.slice(this.start, this.cursor),
+      value,
+      line: this.line,
+      column: this.start - this.lineStart + 1,
+    });
+  }
+
+  private error(message: string): LexError {
+    return new LexError(message, this.line, this.start - this.lineStart + 1);
+  }
+
+  private reset(source: string): void {
+    this.source = source;
+    this.tokens = [];
+    this.cursor = 0;
+    this.start = 0;
+    this.line = 1;
+    this.lineStart = 0;
+  }
+
+  // --- scanners -------------------------------------------------------------
+
+  private scanToken(): void {
+    // Comments first: `//` must win over the `/` binary operator.
+    if (this.match("//")) {
+      this.advanceWhile((c) => c !== "\n");
+      return;
+    }
+
+    const c = this.peek();
+
+    if (isWhitespace(c)) {
+      this.advance();
+      return;
+    }
+
+    if (isDigit(c)) return this.scanNumber();
+    if (c === '"') return this.scanString();
+    if (isIdentifierStart(c)) return this.scanIdentifier();
+
+    const singleCharType = SINGLE_CHAR_TOKENS[c];
+    if (singleCharType) {
+      this.advance();
+      this.addToken(singleCharType, c);
+      return;
+    }
+
+    for (const op of TWO_CHAR_OPERATORS) {
+      if (this.match(op)) {
+        this.addToken(TokenType.BinaryOperator, op);
+        return;
+      }
+    }
+
+    if (this.match("=")) {
+      this.addToken(TokenType.Assignment, "=");
+      return;
+    }
+
+    if (SINGLE_CHAR_OPERATORS.includes(c)) {
+      this.advance();
+      this.addToken(TokenType.BinaryOperator, c);
+      return;
+    }
+
+    // Always consume, so an unknown character can never spin the loop forever.
+    this.advance();
+    throw this.error(`Unexpected character '${c}'`);
+  }
+
+  private scanNumber(): void {
+    this.advanceWhile(isDigit);
+
+    // A single fractional part only; a second '.' ends the number and will be
+    // reported on its own rather than folded into an unparseable lexeme.
+    if (this.peek() === "." && isDigit(this.peek(1))) {
+      this.advance();
+      this.advanceWhile(isDigit);
+    }
+
+    const lexeme = this.source.slice(this.start, this.cursor);
+    this.addToken(TokenType.Number, Number(lexeme), lexeme);
+  }
+
+  private scanString(): void {
+    this.advance(); // opening quote
+
+    let value = "";
+    while (!this.isAtEnd() && this.peek() !== '"') {
+      if (this.peek() === "\\") {
+        this.advance();
+        if (this.isAtEnd()) break;
+        value += unescape(this.advance());
+        continue;
+      }
+      value += this.advance();
+    }
+
+    if (this.isAtEnd()) throw this.error("Unterminated string");
+
+    this.advance(); // closing quote
+    this.addToken(TokenType.String, value);
+  }
+
+  private scanIdentifier(): void {
+    this.advanceWhile(isIdentifierPart);
+    const identifier = this.source.slice(this.start, this.cursor);
+    this.addToken(KEYWORDS[identifier] ?? TokenType.Identifier, identifier);
+  }
+}
+
+function isDigit(c: string): boolean {
+  return c >= "0" && c <= "9";
+}
+
+function isWhitespace(c: string): boolean {
+  return c === " " || c === "\t" || c === "\r" || c === "\n";
+}
+
+function isIdentifierStart(c: string): boolean {
+  return c === "_" || (c >= "a" && c <= "z") || (c >= "A" && c <= "Z");
+}
+
+function isIdentifierPart(c: string): boolean {
+  return isIdentifierStart(c) || isDigit(c);
+}
+
+function unescape(c: string): string {
+  switch (c) {
+    case "n":
+      return "\n";
+    case "t":
+      return "\t";
+    case "r":
+      return "\r";
+    default:
+      return c; // covers \" and \\
   }
 }
