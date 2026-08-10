@@ -1,0 +1,11 @@
+*.d.ts
+*.js
+*.ts.map
+*.js.map
+node_modules/
+dist/
+*.log
+.DS_Store
+
+# agent worktrees live here transiently; never part of the tree
+.claude/worktrees/
