@@ -46,6 +46,19 @@ let {a} = zz // a = 1
 
 let obj = { a }
 
+const x = match some_function(obj) {
+  [1,2] -> "success"
+  [3,4] -> "fail"
+}
+
+interface Ok {
+  value: any;
+}
+
+interface Error {
+  err: string
+}
+
 zz["a"] = 5
 
 f += 1

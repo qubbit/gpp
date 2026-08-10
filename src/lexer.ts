@@ -1,9 +1,14 @@
 export enum TokenType {
   Identifier = "identifier",
-  BinaryOperator = "binary_op", // one of +, -, *, /, and the comparison/logical ops
+  BinaryOperator = "binary_op", // one of +, -, *, /, %, and the comparison/logical ops
   Number = "number",
   String = "string",
   Assignment = "=",
+  // Compound assignment (+=, -=, *=, /=); the operator is kept in `value`.
+  CompoundAssignment = "compound_assign",
+  Arrow = "->",
+  Dot = ".",
+  Semicolon = ";",
   Let = "let",
   If = "if",
   Else = "else",
@@ -52,6 +57,8 @@ const KEYWORDS: Record<string, TokenType> = {
 
 const SINGLE_CHAR_TOKENS: Record<string, TokenType> = {
   ":": TokenType.Colon,
+  ";": TokenType.Semicolon,
+  ".": TokenType.Dot,
   "(": TokenType.LParen,
   ")": TokenType.RParen,
   "{": TokenType.LBrace,
@@ -63,7 +70,9 @@ const SINGLE_CHAR_TOKENS: Record<string, TokenType> = {
 
 // Checked before the single-character operators so that `>=` never lexes as `>` then `=`.
 const TWO_CHAR_OPERATORS = ["||", "&&", ">=", "<=", "==", "!="];
-const SINGLE_CHAR_OPERATORS = ["+", "-", "*", "/", ">", "<", "!"];
+// Also checked before single-character operators, so `+=` never lexes as `+` then `=`.
+const COMPOUND_ASSIGNMENTS = ["+=", "-=", "*=", "/=", "%="];
+const SINGLE_CHAR_OPERATORS = ["+", "-", "*", "/", "%", ">", "<", "!"];
 
 export interface Token {
   type: TokenType;
@@ -193,6 +202,19 @@ export class Lexer {
       this.advance();
       this.addToken(singleCharType, c);
       return;
+    }
+
+    // `->` before the `-` operator, otherwise match arms lex as minus/greater-than.
+    if (this.match("->")) {
+      this.addToken(TokenType.Arrow, "->");
+      return;
+    }
+
+    for (const op of COMPOUND_ASSIGNMENTS) {
+      if (this.match(op)) {
+        this.addToken(TokenType.CompoundAssignment, op);
+        return;
+      }
     }
 
     for (const op of TWO_CHAR_OPERATORS) {
