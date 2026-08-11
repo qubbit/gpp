@@ -125,7 +125,13 @@ describe("literals", () => {
   });
 
   test("brackets and operators inside a string stay literal", () => {
-    assert.equal(lex('"[a] + {b}"')[0]!.value, "[a] + {b}");
+    assert.equal(lex('"[a] + (b)"')[0]!.value, "[a] + (b)");
+  });
+
+  // a brace now opens an interpolation, so a literal brace is doubled
+  test("a doubled brace is a literal brace", () => {
+    assert.equal(lex('"{{a}}"')[0]!.value, "{a}");
+    assert.equal(lex('"[a] + {{b}}"')[0]!.value, "[a] + {b}");
   });
 
   test("an unterminated string is reported", () => {

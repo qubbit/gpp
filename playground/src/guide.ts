@@ -57,6 +57,32 @@ let shadowed = "outer"
 print(shadowed)`,
       },
       {
+        title: "String interpolation",
+        note:
+          "A brace inside a string holds an expression, not just a name. Values are rendered the way print renders them, so str() is rarely needed.",
+        source: `let name = "gpp"
+let items = ["a", "b", "c"]
+
+print("hello, {name}")
+
+// any expression fits, not only a name
+print("{len(items)} items: {join(items, ", ")}")
+print("2 + 3 = {2 + 3}")
+print("first is {items[0]}, last is {items[-1]}")
+
+// compare with building the string by hand
+let n = 3
+print("the long way: " + str(n) + " of " + str(len(items)))
+print("the short way: {n} of {len(items)}")
+
+// a hole can hold a string of its own, quotes and all
+let person = {name: "ada", born: 1815}
+print("{person["name"]} was born in {person.born}")
+
+// double a brace to write one literally
+print("{{not a hole}}")`,
+      },
+      {
         title: "Truthiness",
         note:
           "Only false and nil are falsy. Zero and the empty string are truthy, which is deliberate: emptiness is not falseness.",
@@ -185,7 +211,7 @@ print("n is " + if n % 2 == 0 { "even" } else { "odd" })
 // a branch yields its own last statement, so it can do work first
 let verdict = if n > 2 {
   let doubled = n * 2
-  "doubled to " + str(doubled)
+  "doubled to {doubled}"
 } else {
   "left alone"
 }
@@ -434,9 +460,9 @@ print(contains(pairs, [3, 4]))`,
         source: `fn describe(value) {
   return match value {
     []        -> "empty"
-    [x]       -> "one item: " + str(x)
-    [a, b]    -> "a pair summing to " + str(a + b)
-    [h, ...t] -> "head " + str(h) + " and " + str(len(t)) + " more"
+    [x]       -> "one item: {x}"
+    [a, b]    -> "a pair summing to {a + b}"
+    [h, ...t] -> "head {h} and {len(t)} more"
     _         -> "not a list"
   }
 }

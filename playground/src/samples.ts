@@ -71,9 +71,9 @@ for i in range(1, 21) {
 fn describe(value) {
   return match value {
     []            -> "an empty list"
-    [x]           -> "one item: " + str(x)
-    [a, b]        -> "a pair adding to " + str(a + b)
-    [h, ...t]     -> "head " + str(h) + " and " + str(len(t)) + " more"
+    [x]           -> "one item: {x}"
+    [a, b]        -> "a pair adding to {a + b}"
+    [h, ...t]     -> "head {h} and {len(t)} more"
     _             -> "something else"
   }
 }
@@ -162,7 +162,7 @@ let people = [
 // destructuring pulls fields out by name
 fn greet(person) {
   let {name, age} = person
-  return upper(name) + " is " + str(age)
+  return "{upper(name)} is {age}"
 }
 
 for person in people {
@@ -441,7 +441,7 @@ print("shortest paths from a:")
 for node in ["b", "c", "d", "e", "f"] {
   let cost = result.dist.get(node)
   let route = join(path_to(result.prev, node), " -> ")
-  print("  " + node + ": cost " + str(cost) + " via " + route)
+  print("  {node}: cost {cost} via {route}")
 }
 
 // note d: the direct route a -> b -> d costs 14, but going

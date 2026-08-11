@@ -143,10 +143,21 @@ export function registerGppLanguage(monaco: Monaco): void {
       ],
 
       string: [
-        [/[^\\"]+/, "string"],
+        // a doubled brace is a literal brace, so it must be matched first
+        [/\{\{|\}\}/, "string.escape"],
+        // an interpolation hole is highlighted as code, not as string
+        [/\{/, { token: "delimiter.bracket", next: "@interpolation" }],
+        [/[^\\"{}]+/, "string"],
         [/@escapes/, "string.escape"],
         [/\\./, "string.escape.invalid"],
         [/"/, { token: "string.quote", bracket: "@close", next: "@pop" }],
+      ],
+
+      // inside `{...}`, fall back to the root rules so the expression is
+      // highlighted like ordinary code
+      interpolation: [
+        [/\}/, { token: "delimiter.bracket", next: "@pop" }],
+        { include: "root" },
       ],
 
       whitespace: [

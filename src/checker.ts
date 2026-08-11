@@ -765,6 +765,14 @@ export class Checker {
       case "nil_literal":
         return NIL;
 
+      case "interpolated_string":
+        // every hole is stringified, so any type is acceptable; check them so
+        // an error inside a hole is still reported
+        for (const hole of expression.expressions) {
+          this.checkExpression(hole, scope, null);
+        }
+        return STRING;
+
       case "identifier": {
         const type = scope.lookup(expression.name);
         if (!type) {

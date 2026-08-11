@@ -1,4 +1,9 @@
-import { TokenType, type Token } from "./lexer.js";
+import {
+  Lexer,
+  TokenType,
+  type InterpolationParts,
+  type Token,
+} from "./lexer.js";
 import type {
   ArrayLiteral,
   ArrayPattern,
@@ -84,6 +89,28 @@ export class Parser {
   // while true an expression cannot be continued by an operator on a later
   // line. set for match arm bodies, where the next line starts a new arm.
   private singleLine = false;
+
+  /**
+   * parses a token stream as a single expression, used for interpolation
+   * holes. distinct from parse(), which reads statements: in a hole a leading
+   * `{` is an object literal, where a statement would read it as a block.
+   */
+  public parseExpressionOnly(tokens: Token[]): Expression {
+    this.tokens = tokens;
+    this.cursor = 0;
+    this.noBrace = false;
+    this.singleLine = false;
+
+    const expression = this.parseExpression();
+
+    if (!this.isAtEnd()) {
+      throw this.error(
+        `Unexpected token '${this.peek().lexeme}' after the interpolated expression`,
+      );
+    }
+
+    return expression;
+  }
 
   public parse(tokens: Token[]): Program {
     this.tokens = tokens;
@@ -814,6 +841,10 @@ export class Parser {
           column: token.column,
         };
 
+      case TokenType.InterpolatedString:
+        this.advance();
+        return this.parseInterpolatedString(token);
+
       case TokenType.True:
       case TokenType.False:
         this.advance();
@@ -873,6 +904,54 @@ export class Parser {
       default:
         throw this.error(`Unexpected token '${token.lexeme}' in expression`);
     }
+  }
+
+  /**
+   * builds the tree for `"a {b} c"`. the lexer captured each hole's raw source
+   * rather than tokens, so each is lexed and parsed here in turn.
+   *
+   * a hole is parsed in a fresh parser, which keeps the outer token stream flat
+   * and means a hole cannot accidentally consume tokens past its closing brace.
+   */
+  private parseInterpolatedString(token: Token): Expression {
+    const parts = token.value as InterpolationParts;
+
+    const expressions = parts.holes.map((hole) => {
+      let tokens: Token[];
+      try {
+        tokens = new Lexer().lex(hole.source);
+      } catch (error) {
+        // report a lex failure inside the hole at the hole's own position
+        throw this.error(
+          error instanceof Error ? error.message : String(error),
+          { ...token, line: hole.line, column: hole.column },
+        );
+      }
+
+      let parsed: Expression;
+      try {
+        // parsed as an expression, not a statement: a hole holding `{a: 1}` is
+        // an object literal, whereas a statement would read `{` as a block
+        parsed = new Parser().parseExpressionOnly(tokens);
+      } catch (error) {
+        throw this.error(
+          error instanceof Error ? error.message : String(error),
+          { ...token, line: hole.line, column: hole.column },
+        );
+      }
+
+      // the hole was parsed standalone, so its positions start from 1:1. shift
+      // them so errors and the ast view point into the enclosing file.
+      return offsetExpression(parsed, hole.line, hole.column);
+    });
+
+    return {
+      kind: "interpolated_string",
+      literals: parts.literals,
+      expressions,
+      line: token.line,
+      column: token.column,
+    };
   }
 
   private parseArrayLiteral(): ArrayLiteral {
@@ -1302,6 +1381,39 @@ export class Parser {
 
     throw this.error(`Expected a type, found '${token.lexeme}'`);
   }
+}
+
+/**
+ * shifts every position in a subtree so a hole parsed standalone reports
+ * against the enclosing file. the hole started at 1:1, so line 1 maps to
+ * `line` and its columns shift by `column - 1`; later lines only shift down.
+ */
+function offsetExpression<T>(node: T, line: number, column: number): T {
+  const shift = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(shift);
+    if (!value || typeof value !== "object") return value;
+
+    const record = value as Record<string, unknown>;
+    const moved: Record<string, unknown> = {};
+
+    for (const [key, item] of Object.entries(record)) {
+      if (key === "line" && typeof item === "number") {
+        moved[key] = item + line - 1;
+      } else if (key === "column" && typeof item === "number") {
+        // only the hole's first line starts partway across
+        moved[key] =
+          typeof record.line === "number" && record.line === 1
+            ? item + column - 1
+            : item;
+      } else {
+        moved[key] = shift(item);
+      }
+    }
+
+    return moved;
+  };
+
+  return shift(node) as T;
 }
 
 /** convenience wrapper: tokens in, program out. */
