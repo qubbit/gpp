@@ -223,6 +223,9 @@ class Scope {
 export class Checker {
   private errors: TypeError[] = [];
   private interfaces = new Map<string, ObjectTypeInfo>();
+  // tagged unions by name, and every variant by its own name
+  private types = new Map<string, Type>();
+  private variants = new Map<string, ObjectTypeInfo>();
   // the return type of the function being checked, null at the top level
   private expectedReturn: Type | null = null;
   private loopDepth = 0;
@@ -230,6 +233,8 @@ export class Checker {
   check(program: Program): CheckResult {
     this.errors = [];
     this.interfaces.clear();
+    this.types.clear();
+    this.variants.clear();
     this.expectedReturn = null;
     this.loopDepth = 0;
 
@@ -238,10 +243,16 @@ export class Checker {
       scope.define(name, type);
     }
 
-    // interfaces first, so a declaration may reference one declared later
+    // interfaces and types first, so a declaration may reference one declared
+    // later, and so constructors exist before any code calls them
     for (const statement of program.body) {
       if (statement.kind === "interface_declaration") {
         this.declareInterface(statement);
+      }
+    }
+    for (const statement of program.body) {
+      if (statement.kind === "type_declaration") {
+        this.declareType(statement, scope);
       }
     }
 
@@ -432,6 +443,57 @@ export class Checker {
     );
   }
 
+  /**
+   * registers a tagged union: the type itself as the union of its variants,
+   * and one constructor function per variant taking its fields positionally.
+   */
+  private declareType(
+    statement: Extract<Statement, { kind: "type_declaration" }>,
+    scope: Scope,
+  ): void {
+    if (this.types.has(statement.name)) {
+      this.report(`Type '${statement.name}' is already declared`, statement);
+      return;
+    }
+
+    const seen = new Set<string>();
+    const variantTypes: Type[] = [];
+
+    for (const variant of statement.variants) {
+      if (seen.has(variant.name)) {
+        this.report(
+          `Variant '${variant.name}' is declared twice in ${statement.name}`,
+          variant,
+        );
+        continue;
+      }
+      seen.add(variant.name);
+
+      const fields = new Map<string, FieldInfo>();
+      for (const field of variant.fields) {
+        fields.set(field.name, {
+          type: this.resolveType(field.type),
+          optional: field.optional,
+        });
+      }
+
+      const type = objectOf(fields, { variant: variant.name });
+      variantTypes.push(type);
+      this.variants.set(variant.name, type);
+
+      // the constructor takes the fields in declaration order
+      scope.define(
+        variant.name,
+        functionOf(
+          variant.fields.map((field) => this.resolveType(field.type)),
+          type,
+        ),
+      );
+    }
+
+    this.types.set(statement.name, unionOf(variantTypes));
+  }
+
   private signatureOf(fn: {
     params: Parameter[];
     returnType: TypeNode | null;
@@ -468,6 +530,13 @@ export class Checker {
 
         const declared = this.interfaces.get(node.name);
         if (declared) return declared;
+
+        const union = this.types.get(node.name);
+        if (union) return union;
+
+        // a single variant is a type too, so `fn f(v: Ok)` narrows to one case
+        const variant = this.variants.get(node.name);
+        if (variant) return variant;
 
         this.report(`Unknown type '${node.name}'`, node);
         // recover as any so one bad annotation does not cascade
@@ -746,7 +815,8 @@ export class Checker {
         return;
 
       case "interface_declaration":
-        // already handled in the hoist pass
+      case "type_declaration":
+        // both are handled in the hoist pass
         return;
 
       case "import_statement": {
@@ -964,6 +1034,24 @@ export class Checker {
         return;
       }
 
+      case "variant_pattern": {
+        const declared = this.variants.get(pattern.name);
+        if (!declared) {
+          this.report(`Unknown variant '${pattern.name}'`, pattern);
+        }
+        for (const field of pattern.fields) {
+          const fieldType = declared?.fields.get(field.key)?.type ?? ANY;
+          if (declared && !declared.fields.has(field.key)) {
+            this.report(
+              `Variant '${pattern.name}' has no field '${field.key}'`,
+              field,
+            );
+          }
+          this.bindPattern(field.value, fieldType, scope);
+        }
+        return;
+      }
+
       case "object_pattern": {
         if (!isAny(type) && type.kind !== "object") {
           this.report(
@@ -1016,6 +1104,26 @@ export class Checker {
           this.bindMatchPattern(item, element, scope);
         }
         if (pattern.rest) scope.define(pattern.rest, arrayOf(element));
+        return;
+      }
+
+      case "variant_pattern": {
+        const declared = this.variants.get(pattern.name);
+        if (!declared) {
+          this.report(`Unknown variant '${pattern.name}'`, pattern);
+        }
+        // matching a variant is what tells the arm which one it has, so the
+        // fields come from the declaration rather than the subject
+        for (const field of pattern.fields) {
+          if (declared && !declared.fields.has(field.key)) {
+            this.report(
+              `Variant '${pattern.name}' has no field '${field.key}'`,
+              field,
+            );
+          }
+          const fieldType = declared?.fields.get(field.key)?.type ?? ANY;
+          this.bindMatchPattern(field.value, fieldType, scope);
+        }
         return;
       }
 
@@ -1376,10 +1484,31 @@ export class Checker {
   /** the values of a finite subject type that no pattern matches. */
   private uncoveredCases(subject: Type, arms: MatchArm[]): string[] {
     const literals = new Set<string>();
+    const matchedVariants = new Set<string>();
     for (const arm of arms) {
       if (arm.pattern.kind === "literal_pattern") {
         literals.add(stringifyLiteral(arm.pattern.value));
       }
+      if (arm.pattern.kind === "variant_pattern") {
+        matchedVariants.add(arm.pattern.name);
+      }
+    }
+
+    // a tagged union is covered when every one of its variants is matched
+    const variantsOf = (type: Type): string[] | null => {
+      const options = type.kind === "union" ? type.options : [type];
+      const names = options.map((option) =>
+        option.kind === "object" ? option.variant : undefined,
+      );
+      // every member must be a variant for this to be a tagged union
+      return names.every((name) => name !== undefined)
+        ? (names as string[])
+        : null;
+    };
+
+    const variantNames = variantsOf(subject);
+    if (variantNames) {
+      return variantNames.filter((name) => !matchedVariants.has(name));
     }
 
     // the cases a type can take, where that set is finite and nameable

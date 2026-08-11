@@ -22,6 +22,7 @@ const KEYWORDS = [
   "import",
   "export",
   "interface",
+  "type",
   "match",
 ];
 

@@ -27,6 +27,7 @@ import {
   isTruthy,
   stringify,
   typeName,
+  VARIANT_TAG,
   valuesEqual,
   type FunctionValue,
   type ObjectValue,
@@ -283,6 +284,28 @@ export class Evaluator {
       // interfaces describe types only, so they have no runtime effect
       case "interface_declaration":
         return;
+
+      case "type_declaration": {
+        // each variant becomes a constructor taking its fields positionally.
+        // the value is a plain object carrying a hidden tag, so variants print,
+        // compare and destructure like any other object.
+        for (const variant of statement.variants) {
+          const fields = variant.fields.map((field) => field.name);
+          env.define(variant.name, {
+            kind: "native",
+            name: variant.name,
+            arity: fields.length,
+            call: (args) => {
+              const value: ObjectValue = { [VARIANT_TAG]: variant.name };
+              fields.forEach((field, index) => {
+                value[field] = args[index] ?? null;
+              });
+              return value;
+            },
+          });
+        }
+        return;
+      }
 
       case "import_statement":
         this.executeImport(statement, env);
@@ -923,6 +946,20 @@ export class Evaluator {
         return true;
       }
 
+      case "variant_pattern": {
+        if (!isObject(value)) return false;
+        // the tag is what distinguishes one variant from another
+        if (value[VARIANT_TAG] !== pattern.name) return false;
+
+        for (const field of pattern.fields) {
+          if (!(field.key in value)) return false;
+          if (!this.matchPattern(field.value, value[field.key]!, scope)) {
+            return false;
+          }
+        }
+        return true;
+      }
+
       case "object_pattern": {
         if (!isObject(value)) return false;
 
@@ -985,6 +1022,9 @@ function collectBindings(pattern: Pattern, names: string[] = []): string[] {
     case "object_pattern":
       for (const field of pattern.fields) collectBindings(field.value, names);
       if (pattern.rest) names.push(pattern.rest);
+      break;
+    case "variant_pattern":
+      for (const field of pattern.fields) collectBindings(field.value, names);
       break;
     default:
       break;

@@ -2,6 +2,10 @@
 
 import type { BlockStatement, Parameter } from "./ast.js";
 
+// the field a variant carries its name in; kept here so stringify and typeName
+// can recognise one without importing the evaluator
+export const VARIANT_TAG = "variant tag";
+
 export type Value =
   | number
   | string
@@ -54,6 +58,11 @@ export function isObject(value: Value): value is ObjectValue {
 export function typeName(value: Value): string {
   // the language calls it nil; the host representation is javascript null
   if (value === null) return "nil";
+  if (isObject(value)) {
+    const tag = value[VARIANT_TAG];
+    // a variant reports its own name, which is more useful than "object"
+    if (typeof tag === "string") return tag;
+  }
   if (Array.isArray(value)) return "array";
   if (isCallable(value)) return "function";
   switch (typeof value) {
@@ -89,6 +98,15 @@ export function stringify(value: Value, seen = new Set<object>()): string {
     if (Array.isArray(value)) {
       return `[${value.map((item) => quoted(item, seen)).join(", ")}]`;
     }
+    // a variant prints as its constructor call, not as the object underneath
+    const tag = (value as ObjectValue)[VARIANT_TAG];
+    if (typeof tag === "string") {
+      const fields = Object.entries(value)
+        .filter(([key]) => key !== VARIANT_TAG)
+        .map(([, item]) => quoted(item, seen));
+      return fields.length ? `${tag}(${fields.join(", ")})` : `${tag}()`;
+    }
+
     const entries = Object.entries(value).map(
       ([key, item]) => `${key}: ${quoted(item, seen)}`,
     );

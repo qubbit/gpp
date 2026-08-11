@@ -30,8 +30,11 @@ import type {
   Program,
   ReturnStatement,
   Statement,
+  TypeDeclaration,
   TypeField,
+  VariantDeclaration,
   TypeNode,
+  VariantPattern,
 } from "./ast.js";
 
 export class ParseError extends Error {
@@ -239,6 +242,7 @@ export class Parser {
     if (this.check(TokenType.While)) return this.parseWhile();
     if (this.check(TokenType.For)) return this.parseFor();
     if (this.check(TokenType.Interface)) return this.parseInterface();
+    if (this.check(TokenType.Type)) return this.parseTypeDeclaration();
     if (this.check(TokenType.From) || this.check(TokenType.Import)) {
       return this.parseImport();
     }
@@ -527,6 +531,82 @@ export class Parser {
       fields,
       line: token.line,
       column: token.column,
+    };
+  }
+
+  /**
+   * `type Shape =
+   *    | Circle {radius: number}
+   *    | Rect {w: number, h: number}`
+   *
+   * a leading bar before the first variant is optional, so both the aligned
+   * and the compact spelling read the same.
+   */
+  private parseTypeDeclaration(): TypeDeclaration {
+    const token = this.expect(TokenType.Type, "to start a type declaration");
+    const name = this.expect(TokenType.Identifier, "as the type name");
+    this.expect(TokenType.Assignment, "after the type name");
+
+    const variants: VariantDeclaration[] = [];
+
+    // `|` lexes as a binary operator, so variants are separated by lexeme
+    const atBar = () =>
+      this.check(TokenType.BinaryOperator) && this.peek().lexeme === "|";
+
+    // the bar before the first variant is optional
+    if (atBar()) this.advance();
+
+    for (;;) {
+      variants.push(this.parseVariant());
+      if (!atBar()) break;
+      this.advance();
+    }
+
+    if (variants.length === 0) {
+      throw this.error("A type needs at least one variant", token);
+    }
+
+    this.endStatement();
+    return {
+      kind: "type_declaration",
+      name: name.lexeme,
+      variants,
+      line: token.line,
+      column: token.column,
+    };
+  }
+
+  /** `Circle {radius: number}`, or `Nothing` for a variant with no fields. */
+  private parseVariant(): VariantDeclaration {
+    const name = this.expect(TokenType.Identifier, "as a variant name");
+    const fields: TypeField[] = [];
+
+    // a variant may carry no data at all
+    if (this.check(TokenType.LBrace)) {
+      this.advance();
+      while (!this.check(TokenType.RBrace) && !this.isAtEnd()) {
+        if (this.match(TokenType.Semicolon) || this.match(TokenType.Comma)) {
+          continue;
+        }
+        const fieldName = this.expect(TokenType.Identifier, "as a field name");
+        const optional = this.match(TokenType.Question);
+        this.expect(TokenType.Colon, "after a field name");
+        fields.push({
+          name: fieldName.lexeme,
+          type: this.parseType(),
+          optional,
+          line: fieldName.line,
+          column: fieldName.column,
+        });
+      }
+      this.expect(TokenType.RBrace, "to close the variant fields");
+    }
+
+    return {
+      name: name.lexeme,
+      fields,
+      line: name.line,
+      column: name.column,
     };
   }
 
@@ -1170,7 +1250,17 @@ export class Parser {
         }
         throw this.error(`Unexpected token '${token.lexeme}' in pattern`);
 
-      case TokenType.Identifier:
+      case TokenType.Identifier: {
+        // `Ok {value}` is a variant pattern; a bare name is a binding. the
+        // brace must be on the same line, so an arm body starting with a block
+        // is not swallowed.
+        if (
+          this.peek(1).type === TokenType.LBrace &&
+          this.peek(1).line === token.line
+        ) {
+          return this.parseVariantPattern();
+        }
+
         this.advance();
         // `_` matches without binding
         if (token.lexeme === "_") {
@@ -1186,6 +1276,7 @@ export class Parser {
           line: token.line,
           column: token.column,
         };
+      }
 
       case TokenType.LBracket:
         return this.parseArrayPattern();
@@ -1219,6 +1310,44 @@ export class Parser {
       rest,
       line: token.line,
       column: token.column,
+    };
+  }
+
+  /** `Ok {value}` or `Ok {value: v}` — a variant name then its fields. */
+  private parseVariantPattern(): VariantPattern {
+    const name = this.expect(TokenType.Identifier, "as a variant name");
+    this.expect(TokenType.LBrace, "to open the variant fields");
+
+    const fields: ObjectPatternField[] = [];
+    while (!this.check(TokenType.RBrace) && !this.isAtEnd()) {
+      const key = this.expect(TokenType.Identifier, "as a field name");
+      // `{value}` binds a name; `{value: p}` matches the field against p
+      const value: Pattern = this.match(TokenType.Colon)
+        ? this.parsePattern()
+        : {
+            kind: "binding_pattern",
+            name: key.lexeme,
+            line: key.line,
+            column: key.column,
+          };
+
+      fields.push({
+        key: key.lexeme,
+        value,
+        line: key.line,
+        column: key.column,
+      });
+
+      if (!this.match(TokenType.Comma)) break;
+    }
+
+    this.expect(TokenType.RBrace, "to close the variant fields");
+    return {
+      kind: "variant_pattern",
+      name: name.lexeme,
+      fields,
+      line: name.line,
+      column: name.column,
     };
   }
 

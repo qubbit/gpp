@@ -40,6 +40,9 @@ export interface ObjectTypeInfo {
   fields: Map<string, FieldInfo>;
   // the interface this shape came from, kept only so errors can name it
   name?: string;
+  // the variant this value was built by, when it came from a type declaration.
+  // two variants of the same type are distinct even with identical fields.
+  variant?: string;
   // true for a plain object literal, whose field set is exactly known. an
   // interface may be satisfied by a value carrying extra fields.
   exact?: boolean;
@@ -81,11 +84,12 @@ export function functionOf(params: Type[], returns: Type): FunctionTypeInfo {
 
 export function objectOf(
   fields: Map<string, FieldInfo>,
-  options: { name?: string; exact?: boolean } = {},
+  options: { name?: string; exact?: boolean; variant?: string } = {},
 ): ObjectTypeInfo {
   const type: ObjectTypeInfo = { kind: "object", fields };
   if (options.name !== undefined) type.name = options.name;
   if (options.exact !== undefined) type.exact = options.exact;
+  if (options.variant !== undefined) type.variant = options.variant;
   return type;
 }
 
@@ -147,6 +151,7 @@ export function typesEqual(a: Type, b: Type): boolean {
 
     case "object": {
       const other = b as ObjectTypeInfo;
+      if (a.variant !== other.variant) return false;
       if (a.fields.size !== other.fields.size) return false;
       for (const [name, field] of a.fields) {
         const match = other.fields.get(name);
@@ -220,6 +225,11 @@ function isObjectAssignable(
   source: ObjectTypeInfo,
   target: ObjectTypeInfo,
 ): boolean {
+  // a tagged variant is nominal among variants: Ok never satisfies Err, even
+  // when their fields happen to line up
+  if (target.variant !== undefined && source.variant !== target.variant) {
+    return false;
+  }
   for (const [name, field] of target.fields) {
     const match = source.fields.get(name);
 
@@ -352,6 +362,7 @@ export function displayType(type: Type): string {
     case "union":
       return type.options.map(displayType).join(" | ");
     case "object": {
+      if (type.variant) return type.variant;
       if (type.name) return type.name;
       const fields = [...type.fields.entries()].map(
         ([name, field]) =>

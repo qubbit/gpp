@@ -591,6 +591,61 @@ println(strict(21))
 // strict("nope")       // uncomment: cannot pass string as argument 1`,
       },
       {
+        title: "Tagged variants",
+        note:
+          "A type declaration defines a set of variants. Each becomes a constructor taking its fields in order, and matching one narrows its fields inside that arm.",
+        source: `type Result =
+  | Ok {value: any}
+  | Err {message: string}
+
+fn divide(a, b): Result {
+  if b == 0 {
+    return Err("cannot divide by zero")
+  }
+  Ok(a / b)
+}
+
+fn render(r: Result): string {
+  return match r {
+    Ok {value}    -> "got {value}"
+    // message is known to be a string here, so upper() is fine
+    Err {message} -> "failed: {upper(message)}"
+  }
+}
+
+println(render(divide(10, 2)))
+println(render(divide(1, 0)))
+
+// a variant prints as the call that built it
+println(Ok(5), Err("nope"))
+println(type_of(Ok(5)))
+
+// variants can carry several fields, or none at all
+type Shape =
+  | Circle {radius: number}
+  | Rect {w: number, h: number}
+  | Empty
+
+fn area(s: Shape): number {
+  return match s {
+    Circle {radius} -> 3.14159 * radius * radius
+    Rect {w, h}     -> w * h
+    Empty {}        -> 0
+  }
+}
+
+println(area(Circle(2)))
+println(area(Rect(3, 4)))
+println(area(Empty()))
+
+// dropping an arm is reported: open the Types tab after uncommenting
+// fn partial(s: Shape) {
+//   match s {
+//     Circle {radius} -> radius
+//   }
+// }`,
+      },
+      {
         title: "Narrowing",
         note:
           "Testing a value refines its type inside the branch, so a union becomes usable without a cast. The refinement belongs to that branch only.",

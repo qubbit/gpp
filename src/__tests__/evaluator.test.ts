@@ -109,6 +109,63 @@ describe("literals and operators", () => {
   });
 });
 
+describe("tagged variants", () => {
+  const RESULT = 'type Result =\n | Ok {value: any}\n | Err {message: string}\n';
+
+  test("a variant constructs and matches", () => {
+    assert.equal(
+      prints(RESULT + 'println(match Ok(5) {\n Ok {value} -> "got {value}"\n Err {message} -> message\n})'),
+      "got 5",
+    );
+    assert.equal(
+      prints(RESULT + 'println(match Err("boom") {\n Ok {value} -> value\n Err {message} -> "failed: {message}"\n})'),
+      "failed: boom",
+    );
+  });
+
+  test("a variant may carry several fields or none", () => {
+    assert.equal(
+      prints("type S =\n | Rect {w: number, h: number}\nprintln(match Rect(3, 4) {\n Rect {w, h} -> w * h\n})"),
+      "12",
+    );
+    assert.equal(
+      prints('type O =\n | None\n | Some {value: any}\nprintln(match None() {\n None {} -> "nothing"\n Some {value} -> value\n})'),
+      "nothing",
+    );
+  });
+
+  test("a variant field can hold a nested pattern", () => {
+    assert.equal(
+      prints(RESULT + "println(match Ok([1, 2]) {\n Ok {value: [a, b]} -> a + b\n _ -> 0\n})"),
+      "3",
+    );
+  });
+
+  // a variant prints as the call that built it, not as the object underneath
+  test("a variant prints as its constructor", () => {
+    assert.equal(prints(RESULT + "println(Ok(5))"), "Ok(5)");
+    assert.equal(prints("type O =\n | None\nprintln(None())"), "None()");
+  });
+
+  test("type_of reports the variant name", () => {
+    assert.equal(prints(RESULT + "println(type_of(Ok(1)))"), "Ok");
+  });
+
+  test("a different variant does not match", () => {
+    assert.equal(
+      prints(RESULT + 'println(match Ok(1) {\n Err {message} -> "e"\n _ -> "fell through"\n})'),
+      "fell through",
+    );
+  });
+
+  test("the leading bar is optional", () => {
+    assert.equal(
+      prints("type T = A {x: number} | B {y: number}\nprintln(match A(1) {\n A {x} -> x\n B {y} -> y\n})"),
+      "1",
+    );
+  });
+});
+
 describe("for with two bindings", () => {
   test("an array yields index and value", () => {
     assert.deepEqual(

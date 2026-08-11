@@ -38,6 +38,7 @@ export enum TokenType {
   Import = "import",
   Export = "export",
   Interface = "interface",
+  Type = "type",
   Match = "match",
 }
 
@@ -58,6 +59,7 @@ const KEYWORDS: Record<string, TokenType> = {
   import: TokenType.Import,
   export: TokenType.Export,
   interface: TokenType.Interface,
+  type: TokenType.Type,
   match: TokenType.Match,
 };
 
