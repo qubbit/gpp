@@ -38,7 +38,7 @@ describe("module", () => {
 
   test("importing map does not shadow the prelude's map", () => {
     assert.equal(
-      prints(withImport("queue", "print(map([1, 2], fn(v) {\n return v * 2\n}))")),
+      prints(withImport("queue", "println(map([1, 2], fn(v) {\n return v * 2\n}))")),
       "[2, 4]",
     );
   });
@@ -52,7 +52,7 @@ describe("module", () => {
     // the module is evaluated once and cached
     assert.equal(
       prints(
-        "from collections import queue\nfrom collections import queue\nlet q = queue()\nq.push(1)\nprint(q.size())",
+        "from collections import queue\nfrom collections import queue\nlet q = queue()\nq.push(1)\nprintln(q.size())",
       ),
       "1",
     );
@@ -62,7 +62,7 @@ describe("module", () => {
 describe("stack", () => {
   test("last in, first out", () => {
     assert.equal(
-      prints(withImport("stack", 's = stack()\ns.push(1)\ns.push(2)\nprint(s.pop())')
+      prints(withImport("stack", 's = stack()\ns.push(1)\ns.push(2)\nprintln(s.pop())')
         .replace("s = stack()", "let s = stack()")),
       "2",
     );
@@ -70,13 +70,13 @@ describe("stack", () => {
 
   test("peek leaves the top in place", () => {
     assert.deepEqual(
-      output(withImport("stack", "let s = stack()\ns.push(1)\nprint(s.peek())\nprint(s.size())")),
+      output(withImport("stack", "let s = stack()\ns.push(1)\nprintln(s.peek())\nprintln(s.size())")),
       ["1", "1"],
     );
   });
 
   test("popping an empty stack yields nil", () => {
-    assert.equal(prints(withImport("stack", "let s = stack()\nprint(s.pop())")), "nil");
+    assert.equal(prints(withImport("stack", "let s = stack()\nprintln(s.pop())")), "nil");
   });
 
   test("size, is_empty, clear and to_array", () => {
@@ -84,7 +84,7 @@ describe("stack", () => {
       output(
         withImport(
           "stack",
-          "let s = stack()\nprint(s.is_empty())\ns.push(1)\ns.push(2)\nprint(s.to_array())\nprint(s.size())\ns.clear()\nprint(s.is_empty())",
+          "let s = stack()\nprintln(s.is_empty())\ns.push(1)\ns.push(2)\nprintln(s.to_array())\nprintln(s.size())\ns.clear()\nprintln(s.is_empty())",
         ),
       ),
       ["true", "[1, 2]", "2", "true"],
@@ -98,7 +98,7 @@ describe("queue", () => {
       output(
         withImport(
           "queue",
-          'let q = queue()\nq.push("a")\nq.push("b")\nprint(q.pop())\nprint(q.pop())',
+          'let q = queue()\nq.push("a")\nq.push("b")\nprintln(q.pop())\nprintln(q.pop())',
         ),
       ),
       ["a", "b"],
@@ -107,13 +107,13 @@ describe("queue", () => {
 
   test("peek returns the front", () => {
     assert.equal(
-      prints(withImport("queue", 'let q = queue()\nq.push("a")\nq.push("b")\nprint(q.peek())')),
+      prints(withImport("queue", 'let q = queue()\nq.push("a")\nq.push("b")\nprintln(q.peek())')),
       "a",
     );
   });
 
   test("popping an empty queue yields nil", () => {
-    assert.equal(prints(withImport("queue", "let q = queue()\nprint(q.pop())")), "nil");
+    assert.equal(prints(withImport("queue", "let q = queue()\nprintln(q.pop())")), "nil");
   });
 
   test("order survives interleaved pushes and pops", () => {
@@ -121,7 +121,7 @@ describe("queue", () => {
       output(
         withImport(
           "queue",
-          "let q = queue()\nq.push(1)\nq.push(2)\nprint(q.pop())\nq.push(3)\nprint(q.pop())\nprint(q.pop())",
+          "let q = queue()\nq.push(1)\nq.push(2)\nprintln(q.pop())\nq.push(3)\nprintln(q.pop())\nprintln(q.pop())",
         ),
       ),
       ["1", "2", "3"],
@@ -132,14 +132,14 @@ describe("queue", () => {
 describe("set", () => {
   test("duplicates are collapsed", () => {
     assert.equal(
-      prints(withImport("set", "let s = set([1, 2, 2, 3, 3, 3])\nprint(s.size())")),
+      prints(withImport("set", "let s = set([1, 2, 2, 3, 3, 3])\nprintln(s.size())")),
       "3",
     );
   });
 
   test("membership", () => {
     assert.deepEqual(
-      output(withImport("set", "let s = set([1, 2])\nprint(s.contains(2))\nprint(s.contains(9))")),
+      output(withImport("set", "let s = set([1, 2])\nprintln(s.contains(2))\nprintln(s.contains(9))")),
       ["true", "false"],
     );
   });
@@ -147,14 +147,14 @@ describe("set", () => {
   test("values of different types do not collide", () => {
     // keys are namespaced by type, so 1 and "1" are distinct members
     assert.equal(
-      prints(withImport("set", 'let s = set([1, "1"])\nprint(s.size())')),
+      prints(withImport("set", 'let s = set([1, "1"])\nprintln(s.size())')),
       "2",
     );
   });
 
   test("remove reports whether it removed anything", () => {
     assert.deepEqual(
-      output(withImport("set", "let s = set([1])\nprint(s.remove(1))\nprint(s.remove(1))\nprint(s.size())")),
+      output(withImport("set", "let s = set([1])\nprintln(s.remove(1))\nprintln(s.remove(1))\nprintln(s.size())")),
       ["true", "false", "0"],
     );
   });
@@ -162,14 +162,14 @@ describe("set", () => {
   // nil is a storable value, so absence cannot be inferred from a nil read
   test("nil can be a member", () => {
     assert.deepEqual(
-      output(withImport("set", "let s = set([])\ns.add(nil)\nprint(s.contains(nil))\nprint(s.size())")),
+      output(withImport("set", "let s = set([])\ns.add(nil)\nprintln(s.contains(nil))\nprintln(s.size())")),
       ["true", "1"],
     );
   });
 
   test("clear empties the set", () => {
     assert.equal(
-      prints(withImport("set", "let s = set([1, 2])\ns.clear()\nprint(s.is_empty())")),
+      prints(withImport("set", "let s = set([1, 2])\ns.clear()\nprintln(s.is_empty())")),
       "true",
     );
   });
@@ -178,13 +178,13 @@ describe("set", () => {
 describe("map", () => {
   test("set and get", () => {
     assert.equal(
-      prints(withImport("map", 'let m = map([])\nm.set("a", 1)\nprint(m.get("a"))')),
+      prints(withImport("map", 'let m = map([])\nm.set("a", 1)\nprintln(m.get("a"))')),
       "1",
     );
   });
 
   test("a missing key reads as nil", () => {
-    assert.equal(prints(withImport("map", 'let m = map([])\nprint(m.get("nope"))')), "nil");
+    assert.equal(prints(withImport("map", 'let m = map([])\nprintln(m.get("nope"))')), "nil");
   });
 
   test("keys may be any type", () => {
@@ -192,7 +192,7 @@ describe("map", () => {
       output(
         withImport(
           "map",
-          'let m = map([])\nm.set(1, "number")\nm.set("1", "string")\nprint(m.get(1))\nprint(m.get("1"))\nprint(m.size())',
+          'let m = map([])\nm.set(1, "number")\nm.set("1", "string")\nprintln(m.get(1))\nprintln(m.get("1"))\nprintln(m.size())',
         ),
       ),
       ["number", "string", "2"],
@@ -201,21 +201,21 @@ describe("map", () => {
 
   test("overwriting a key does not grow the map", () => {
     assert.deepEqual(
-      output(withImport("map", 'let m = map([])\nm.set("a", 1)\nm.set("a", 2)\nprint(m.get("a"))\nprint(m.size())')),
+      output(withImport("map", 'let m = map([])\nm.set("a", 1)\nm.set("a", 2)\nprintln(m.get("a"))\nprintln(m.size())')),
       ["2", "1"],
     );
   });
 
   test("nil is storable and distinguishable from absent", () => {
     assert.deepEqual(
-      output(withImport("map", 'let m = map([])\nm.set("k", nil)\nprint(m.has("k"))\nprint(m.has("other"))')),
+      output(withImport("map", 'let m = map([])\nm.set("k", nil)\nprintln(m.has("k"))\nprintln(m.has("other"))')),
       ["true", "false"],
     );
   });
 
   test("initial pairs populate the map", () => {
     assert.equal(
-      prints(withImport("map", 'let m = map([["a", 1], ["b", 2]])\nprint(m.size())')),
+      prints(withImport("map", 'let m = map([["a", 1], ["b", 2]])\nprintln(m.size())')),
       "2",
     );
   });
@@ -223,7 +223,7 @@ describe("map", () => {
   test("keys, values and entries round trip", () => {
     assert.deepEqual(
       output(
-        withImport("map", 'let m = map([])\nm.set("a", 1)\nprint(m.keys())\nprint(m.values())\nprint(len(m.entries()))'),
+        withImport("map", 'let m = map([])\nm.set("a", 1)\nprintln(m.keys())\nprintln(m.values())\nprintln(len(m.entries()))'),
       ),
       ['["a"]', "[1]", "1"],
     );
@@ -231,7 +231,7 @@ describe("map", () => {
 
   test("remove reports whether it removed anything", () => {
     assert.deepEqual(
-      output(withImport("map", 'let m = map([])\nm.set("a", 1)\nprint(m.remove("a"))\nprint(m.remove("a"))')),
+      output(withImport("map", 'let m = map([])\nm.set("a", 1)\nprintln(m.remove("a"))\nprintln(m.remove("a"))')),
       ["true", "false"],
     );
   });
@@ -241,7 +241,7 @@ describe("linked list", () => {
   test("push appends and prepend leads", () => {
     assert.equal(
       prints(
-        withImport("linked_list", "let l = linked_list()\nl.push(2)\nl.push(3)\nl.prepend(1)\nprint(l.to_array())"),
+        withImport("linked_list", "let l = linked_list()\nl.push(2)\nl.push(3)\nl.prepend(1)\nprintln(l.to_array())"),
       ),
       "[1, 2, 3]",
     );
@@ -250,7 +250,7 @@ describe("linked list", () => {
   test("first and last", () => {
     assert.deepEqual(
       output(
-        withImport("linked_list", "let l = linked_list()\nfor v in [1, 2, 3] {\n l.push(v)\n}\nprint(l.first())\nprint(l.last())"),
+        withImport("linked_list", "let l = linked_list()\nfor v in [1, 2, 3] {\n l.push(v)\n}\nprintln(l.first())\nprintln(l.last())"),
       ),
       ["1", "3"],
     );
@@ -259,7 +259,7 @@ describe("linked list", () => {
   test("shift removes from the head", () => {
     assert.deepEqual(
       output(
-        withImport("linked_list", "let l = linked_list()\nl.push(1)\nl.push(2)\nprint(l.shift())\nprint(l.to_array())"),
+        withImport("linked_list", "let l = linked_list()\nl.push(1)\nl.push(2)\nprintln(l.shift())\nprintln(l.to_array())"),
       ),
       ["1", "[2]"],
     );
@@ -267,7 +267,7 @@ describe("linked list", () => {
 
   test("shifting an empty list yields nil", () => {
     assert.equal(
-      prints(withImport("linked_list", "let l = linked_list()\nprint(l.shift())")),
+      prints(withImport("linked_list", "let l = linked_list()\nprintln(l.shift())")),
       "nil",
     );
   });
@@ -275,7 +275,7 @@ describe("linked list", () => {
   test("remove unlinks a node from the middle", () => {
     assert.deepEqual(
       output(
-        withImport("linked_list", "let l = linked_list()\nfor v in [1, 2, 3] {\n l.push(v)\n}\nprint(l.remove(2))\nprint(l.to_array())\nprint(l.size())"),
+        withImport("linked_list", "let l = linked_list()\nfor v in [1, 2, 3] {\n l.push(v)\n}\nprintln(l.remove(2))\nprintln(l.to_array())\nprintln(l.size())"),
       ),
       ["true", "[1, 3]", "2"],
     );
@@ -284,7 +284,7 @@ describe("linked list", () => {
   test("removing the tail keeps last correct", () => {
     assert.deepEqual(
       output(
-        withImport("linked_list", "let l = linked_list()\nfor v in [1, 2] {\n l.push(v)\n}\nl.remove(2)\nprint(l.last())\nl.push(9)\nprint(l.to_array())"),
+        withImport("linked_list", "let l = linked_list()\nfor v in [1, 2] {\n l.push(v)\n}\nl.remove(2)\nprintln(l.last())\nl.push(9)\nprintln(l.to_array())"),
       ),
       ["1", "[1, 9]"],
     );
@@ -293,7 +293,7 @@ describe("linked list", () => {
   test("reverse turns the list around", () => {
     assert.deepEqual(
       output(
-        withImport("linked_list", "let l = linked_list()\nfor v in [1, 2, 3] {\n l.push(v)\n}\nl.reverse()\nprint(l.to_array())\nprint(l.last())"),
+        withImport("linked_list", "let l = linked_list()\nfor v in [1, 2, 3] {\n l.push(v)\n}\nl.reverse()\nprintln(l.to_array())\nprintln(l.last())"),
       ),
       ["[3, 2, 1]", "1"],
     );
@@ -301,7 +301,7 @@ describe("linked list", () => {
 
   test("contains walks the chain", () => {
     assert.deepEqual(
-      output(withImport("linked_list", "let l = linked_list()\nl.push(1)\nprint(l.contains(1))\nprint(l.contains(9))")),
+      output(withImport("linked_list", "let l = linked_list()\nl.push(1)\nprintln(l.contains(1))\nprintln(l.contains(9))")),
       ["true", "false"],
     );
   });
@@ -309,7 +309,7 @@ describe("linked list", () => {
   test("an emptied list can be refilled", () => {
     assert.equal(
       prints(
-        withImport("linked_list", "let l = linked_list()\nl.push(1)\nl.shift()\nl.push(2)\nprint(l.to_array())"),
+        withImport("linked_list", "let l = linked_list()\nl.push(1)\nl.shift()\nl.push(2)\nprintln(l.to_array())"),
       ),
       "[2]",
     );
@@ -322,7 +322,7 @@ describe("priority queue", () => {
       output(
         withImport(
           "priority_queue",
-          'let pq = priority_queue()\npq.push("c", 3)\npq.push("a", 1)\npq.push("b", 2)\nprint(pq.pop())\nprint(pq.pop())\nprint(pq.pop())',
+          'let pq = priority_queue()\npq.push("c", 3)\npq.push("a", 1)\npq.push("b", 2)\nprintln(pq.pop())\nprintln(pq.pop())\nprintln(pq.pop())',
         ),
       ),
       ["a", "b", "c"],
@@ -331,7 +331,7 @@ describe("priority queue", () => {
 
   test("popping an empty queue yields nil", () => {
     assert.equal(
-      prints(withImport("priority_queue", "let pq = priority_queue()\nprint(pq.pop())")),
+      prints(withImport("priority_queue", "let pq = priority_queue()\nprintln(pq.pop())")),
       "nil",
     );
   });
@@ -341,7 +341,7 @@ describe("priority queue", () => {
       output(
         withImport(
           "priority_queue",
-          'let pq = priority_queue()\npq.push("first", 1)\npq.push("second", 1)\nprint(pq.pop())\nprint(pq.pop())',
+          'let pq = priority_queue()\npq.push("first", 1)\npq.push("second", 1)\nprintln(pq.pop())\nprintln(pq.pop())',
         ),
       ),
       ["first", "second"],
@@ -410,7 +410,7 @@ let result = dijkstra(graph, "a")
   test("costs match a reference implementation", () => {
     const lines = output(
       GRAPH_PROGRAM +
-        'for node in ["b", "c", "d", "e", "f"] {\n print(result.dist.get(node))\n}',
+        'for node in ["b", "c", "d", "e", "f"] {\n println(result.dist.get(node))\n}',
     );
     assert.deepEqual(lines, ["4", "2", "9", "5", "20"]);
   });
@@ -419,14 +419,14 @@ let result = dijkstra(graph, "a")
   // cheaper indirect one
   test("a cheaper indirect route wins over a direct edge", () => {
     assert.equal(
-      prints(GRAPH_PROGRAM + 'print(join(path_to(result.prev, "d"), " -> "))'),
+      prints(GRAPH_PROGRAM + 'println(join(path_to(result.prev, "d"), " -> "))'),
       "a -> c -> e -> d",
     );
   });
 
   test("the source has cost zero and no predecessor", () => {
     assert.deepEqual(
-      output(GRAPH_PROGRAM + 'print(result.dist.get("a"))\nprint(result.prev.get("a"))'),
+      output(GRAPH_PROGRAM + 'println(result.dist.get("a"))\nprintln(result.prev.get("a"))'),
       ["0", "nil"],
     );
   });
@@ -437,7 +437,7 @@ let result = dijkstra(graph, "a")
 let graph = {a: [], b: []}
 let dist = map([])
 dist.set("a", 0)
-print(dist.get("b"))`,
+println(dist.get("b"))`,
     );
     assert.deepEqual(lines, ["nil"]);
   });

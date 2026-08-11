@@ -60,17 +60,52 @@ function expectArray(value: Value, fn: string, position: string): Value[] {
 }
 
 /**
- * builds the prelude. `write` receives each line `print` produces and `apply`
+ * the order `sort` uses when given no comparator: numbers numerically, strings
+ * lexicographically, booleans false-first. values of different types are
+ * grouped by type name so a mixed array still sorts deterministically rather
+ * than arbitrarily.
+ */
+function defaultCompare(a: Value, b: Value): number {
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  if (typeof a === "string" && typeof b === "string") {
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
+  if (typeof a === "boolean" && typeof b === "boolean") {
+    return Number(a) - Number(b);
+  }
+
+  const left = typeName(a);
+  const right = typeName(b);
+  if (left !== right) return left < right ? -1 : 1;
+  // same type, not comparable: leave the order alone
+  return 0;
+}
+
+/**
+ * builds the prelude. `out` receives what the program prints and `apply`
  * lets the higher order builtins call back into gpp functions.
  */
+/** where a program's output goes. `write` does not end the line; `writeLine` does. */
+export interface Output {
+  write(text: string): void;
+  writeLine(text: string): void;
+}
+
 export function createPrelude(
-  write: (line: string) => void,
+  out: Output,
   apply: Applier,
 ): Record<string, Value> {
   const prelude: Record<string, Value> = {
     // --- output ---
+    // println ends the line; print leaves it open so successive calls build
+    // one line, which is what makes progress output and tables possible
+    println: native("println", null, (args) => {
+      out.writeLine(args.map((arg) => stringify(arg)).join(" "));
+      return null;
+    }),
+
     print: native("print", null, (args) => {
-      write(args.map((arg) => stringify(arg)).join(" "));
+      out.write(args.map((arg) => stringify(arg)).join(" "));
       return null;
     }),
 
@@ -193,11 +228,214 @@ export function createPrelude(
         .map((item) => stringify(item))
         .join(expectString(separator as Value, "join", "second")),
     ),
+    replace: native("replace", 3, ([value, from, to]) =>
+      // every occurrence, which is what a reader expects without a flag
+      expectString(value as Value, "replace", "first").replaceAll(
+        expectString(from as Value, "replace", "second"),
+        expectString(to as Value, "replace", "third"),
+      ),
+    ),
+
+    substring: native("substring", 3, ([value, from, to]) => {
+      const text = expectString(value as Value, "substring", "first");
+      const start = expectNumber(from as Value, "substring", "second");
+      const end = expectNumber(to as Value, "substring", "third");
+      // negative indices count from the end, matching array indexing
+      const at = (index: number) => (index < 0 ? text.length + index : index);
+      return text.slice(at(start), at(end));
+    }),
+
+    starts_with: native("starts_with", 2, ([value, prefix]) =>
+      expectString(value as Value, "starts_with", "first").startsWith(
+        expectString(prefix as Value, "starts_with", "second"),
+      ),
+    ),
+
+    ends_with: native("ends_with", 2, ([value, suffix]) =>
+      expectString(value as Value, "ends_with", "first").endsWith(
+        expectString(suffix as Value, "ends_with", "second"),
+      ),
+    ),
+
+    repeat: native("repeat", 2, ([value, count]) => {
+      const times = expectNumber(count as Value, "repeat", "second");
+      if (times < 0) throw new RuntimeError("repeat expects a count of zero or more");
+      return expectString(value as Value, "repeat", "first").repeat(times);
+    }),
+
+    pad_start: native("pad_start", 3, ([value, width, fill]) =>
+      expectString(value as Value, "pad_start", "first").padStart(
+        expectNumber(width as Value, "pad_start", "second"),
+        expectString(fill as Value, "pad_start", "third"),
+      ),
+    ),
+
+    pad_end: native("pad_end", 3, ([value, width, fill]) =>
+      expectString(value as Value, "pad_end", "first").padEnd(
+        expectNumber(width as Value, "pad_end", "second"),
+        expectString(fill as Value, "pad_end", "third"),
+      ),
+    ),
+
+    chars: native("chars", 1, ([value]) => [
+      ...expectString(value as Value, "chars", "first"),
+    ]),
+
+    ord: native("ord", 1, ([value]) => {
+      const text = expectString(value as Value, "ord", "first");
+      if (text.length === 0) throw new RuntimeError("ord expects a non empty string");
+      return text.codePointAt(0)!;
+    }),
+
+    chr: native("chr", 1, ([code]) =>
+      String.fromCodePoint(expectNumber(code as Value, "chr", "first")),
+    ),
+
     str: native("str", 1, ([value]) => stringify(value as Value)),
     num: native("num", 1, ([value]) => {
       const parsed = Number(expectString(value as Value, "num", "first"));
       if (Number.isNaN(parsed)) throw new RuntimeError("num received a non numeric string");
       return parsed;
+    }),
+
+    // --- sorting ---
+    // sort(xs) uses the default order; sort(xs, fn) uses a comparator that
+    // returns a negative number, zero, or a positive number
+    sort: native("sort", null, (args) => {
+      if (args.length === 0 || args.length > 2) {
+        throw new RuntimeError("sort expects an array and an optional comparator");
+      }
+      const items = [...expectArray(args[0] as Value, "sort", "first")];
+      const comparator = args[1];
+
+      if (comparator === undefined) return items.sort(defaultCompare);
+
+      if (!isCallable(comparator)) {
+        throw new RuntimeError("sort expects a function as its second argument");
+      }
+      return items.sort((a, b) => {
+        const result = apply(comparator, [a, b]);
+        if (typeof result !== "number") {
+          throw new RuntimeError(
+            "a sort comparator must return a number, negative to order a before b",
+          );
+        }
+        return result;
+      });
+    }),
+
+    // sort by a derived key, which reads better than a comparator for the
+    // common case of ordering records by one field
+    sort_by: native("sort_by", 2, ([array, key]) => {
+      const items = [...expectArray(array as Value, "sort_by", "first")];
+      if (!isCallable(key as Value)) {
+        throw new RuntimeError("sort_by expects a function as its second argument");
+      }
+      return items.sort((a, b) =>
+        defaultCompare(apply(key as Value, [a]), apply(key as Value, [b])),
+      );
+    }),
+
+    // --- searching and aggregating ---
+    index_of: native("index_of", 2, ([haystack, needle]) => {
+      if (typeof haystack === "string") {
+        return haystack.indexOf(expectString(needle as Value, "index_of", "second"));
+      }
+      const items = expectArray(haystack as Value, "index_of", "first");
+      // -1 rather than nil, so the result is always a number
+      return items.findIndex((item) => valuesEqual(item, needle as Value));
+    }),
+
+    find: native("find", 2, ([array, fn]) => {
+      const items = expectArray(array as Value, "find", "first");
+      if (!isCallable(fn as Value)) {
+        throw new RuntimeError("find expects a function as its second argument");
+      }
+      // nil when nothing matches
+      return items.find((item) => apply(fn as Value, [item]) !== false) ?? null;
+    }),
+
+    any: native("any", 2, ([array, fn]) => {
+      const items = expectArray(array as Value, "any", "first");
+      if (!isCallable(fn as Value)) {
+        throw new RuntimeError("any expects a function as its second argument");
+      }
+      return items.some((item) => apply(fn as Value, [item]) !== false);
+    }),
+
+    all: native("all", 2, ([array, fn]) => {
+      const items = expectArray(array as Value, "all", "first");
+      if (!isCallable(fn as Value)) {
+        throw new RuntimeError("all expects a function as its second argument");
+      }
+      return items.every((item) => apply(fn as Value, [item]) !== false);
+    }),
+
+    sum: native("sum", 1, ([array]) =>
+      expectArray(array as Value, "sum", "first").reduce<number>(
+        (total, item) => total + expectNumber(item, "sum", "each element"),
+        0,
+      ),
+    ),
+
+    unique: native("unique", 1, ([array]) => {
+      const items = expectArray(array as Value, "unique", "first");
+      const seen: Value[] = [];
+      for (const item of items) {
+        if (!seen.some((existing) => valuesEqual(existing, item))) seen.push(item);
+      }
+      return seen;
+    }),
+
+    flatten: native("flatten", 1, ([array]) => {
+      // one level only, which is what "flatten" means without a depth argument
+      const items = expectArray(array as Value, "flatten", "first");
+      const out: Value[] = [];
+      for (const item of items) {
+        if (Array.isArray(item)) out.push(...item);
+        else out.push(item);
+      }
+      return out;
+    }),
+
+    zip: native("zip", 2, ([a, b]) => {
+      const left = expectArray(a as Value, "zip", "first");
+      const right = expectArray(b as Value, "zip", "second");
+      // stops at the shorter of the two
+      const out: Value[] = [];
+      for (let i = 0; i < Math.min(left.length, right.length); i++) {
+        out.push([left[i]!, right[i]!]);
+      }
+      return out;
+    }),
+
+    // --- objects ---
+    remove: native("remove", 2, ([object, key]) => {
+      if (!isObject(object as Value)) {
+        throw new RuntimeError("remove expects an object as its first argument");
+      }
+      const name = expectString(key as Value, "remove", "second");
+      // returns a new object, matching push rather than mutating in place
+      const out: ObjectValue = {};
+      for (const [existing, value] of Object.entries(object as ObjectValue)) {
+        if (existing !== name) out[existing] = value;
+      }
+      return out;
+    }),
+
+    has: native("has", 2, ([object, key]) => {
+      if (!isObject(object as Value)) {
+        throw new RuntimeError("has expects an object as its first argument");
+      }
+      return expectString(key as Value, "has", "second") in (object as ObjectValue);
+    }),
+
+    merge: native("merge", 2, ([a, b]) => {
+      if (!isObject(a as Value) || !isObject(b as Value)) {
+        throw new RuntimeError("merge expects two objects");
+      }
+      // the second wins on a clash
+      return { ...(a as ObjectValue), ...(b as ObjectValue) };
     }),
 
     // --- math that belongs in every program ---

@@ -32,7 +32,7 @@ function rejects(source: string, pattern: RegExp): void {
 describe("gradual typing", () => {
   // the whole point of the design: unannotated code is never rejected
   test("an unannotated program is clean", () => {
-    clean("let x = 10\nlet y = x + 20\nprint(y)");
+    clean("let x = 10\nlet y = x + 20\nprintln(y)");
   });
 
   test("an unannotated parameter is any", () => {
@@ -57,7 +57,7 @@ describe("gradual typing", () => {
 
   test("closures over untyped values stay clean", () => {
     clean(
-      "fn adder(n) {\n return fn(x) {\n  return x + n\n }\n}\nprint(adder(1)(2))",
+      "fn adder(n) {\n return fn(x) {\n  return x + n\n }\n}\nprintln(adder(1)(2))",
     );
   });
 });
@@ -232,8 +232,8 @@ describe("objects are open records", () => {
   // `let o = {}` then `o.count = 1` is ordinary gpp, so assigning a new
   // property grows the record rather than erroring
   test("assigning a new property grows the object", () => {
-    clean("let o = {}\no.count = 1\nprint(o.count)");
-    clean('let o = {}\no["k"] = 1\nprint(o.k)');
+    clean("let o = {}\no.count = 1\nprintln(o.count)");
+    clean('let o = {}\no["k"] = 1\nprintln(o.k)');
   });
 
   test("a grown property keeps its type", () => {
@@ -241,7 +241,7 @@ describe("objects are open records", () => {
   });
 
   test("reading an undeclared property is still rejected", () => {
-    rejects("let o = {a: 1}\nprint(o.b)", /Property 'b' does not exist/);
+    rejects("let o = {a: 1}\nprintln(o.b)", /Property 'b' does not exist/);
   });
 
   test("a grown record can satisfy an interface", () => {
@@ -254,13 +254,13 @@ describe("objects are open records", () => {
 describe("operators", () => {
   test("arithmetic requires numbers", () => {
     rejects(
-      'let a: string = "s"\nlet b: number = 1\nprint(a - b)',
+      'let a: string = "s"\nlet b: number = 1\nprintln(a - b)',
       /Cannot apply '-' to string and number/,
     );
   });
 
   test("concatenation accepts a string on either side", () => {
-    clean('let s: string = "a"\nprint(s + 1)\nprint(1 + s)');
+    clean('let s: string = "a"\nprintln(s + 1)\nprintln(1 + s)');
   });
 
   test("arrays concatenate with +", () => {
@@ -269,17 +269,17 @@ describe("operators", () => {
 
   test("comparison requires numbers", () => {
     rejects(
-      'let s: string = "a"\nlet n: number = 1\nprint(s < n)',
+      'let s: string = "a"\nlet n: number = 1\nprintln(s < n)',
       /Cannot apply '<'/,
     );
   });
 
   test("equality accepts any operands", () => {
-    clean('let s: string = "a"\nlet n: number = 1\nprint(s == n)');
+    clean('let s: string = "a"\nlet n: number = 1\nprintln(s == n)');
   });
 
   test("negation requires a number", () => {
-    rejects('let s: string = "a"\nprint(-s)', /Cannot negate string/);
+    rejects('let s: string = "a"\nprintln(-s)', /Cannot negate string/);
   });
 
   test("not accepts anything and yields bool", () => {
@@ -295,7 +295,7 @@ describe("operators", () => {
 describe("collections and indexing", () => {
   test("an array index must be a number", () => {
     rejects(
-      'let xs: number[] = [1]\nprint(xs["a"])',
+      'let xs: number[] = [1]\nprintln(xs["a"])',
       /array index must be a number/,
     );
   });
@@ -312,7 +312,7 @@ describe("collections and indexing", () => {
   });
 
   test("indexing a non collection is rejected", () => {
-    rejects("let n: number = 1\nprint(n[0])", /Cannot index into number/);
+    rejects("let n: number = 1\nprintln(n[0])", /Cannot index into number/);
   });
 
   test("nested array types are tracked", () => {
@@ -337,7 +337,7 @@ describe("control flow", () => {
   });
 
   test("iterating a non collection is rejected", () => {
-    rejects("let n: number = 1\nfor x in n {\n print(x)\n}", /Cannot iterate over number/);
+    rejects("let n: number = 1\nfor x in n {\n println(x)\n}", /Cannot iterate over number/);
   });
 
   test("break and continue must be inside a loop", () => {
@@ -355,7 +355,7 @@ describe("control flow", () => {
   });
 
   test("a block introduces a scope", () => {
-    rejects("{\n let inner = 1\n}\nprint(inner)", /Undefined variable 'inner'/);
+    rejects("{\n let inner = 1\n}\nprintln(inner)", /Undefined variable 'inner'/);
   });
 });
 
@@ -404,27 +404,27 @@ describe("match", () => {
   });
 
   test("bindings do not leak past their arm", () => {
-    rejects('let m = match 1 {\n n -> n\n}\nprint(n)', /Undefined variable 'n'/);
+    rejects('let m = match 1 {\n n -> n\n}\nprintln(n)', /Undefined variable 'n'/);
   });
 });
 
 describe("modules and the prelude", () => {
   test("prelude names are in scope without importing", () => {
-    clean('print(len([1, 2]))\nprint(upper("a"))');
+    clean('println(len([1, 2]))\nprintln(upper("a"))');
   });
 
   test("prelude signatures are checked", () => {
-    rejects("print(upper(1))", /Cannot pass number as argument 1 of type string/);
-    rejects("print(sqrt(\"a\"))", /Cannot pass string as argument 1/);
+    rejects("println(upper(1))", /Cannot pass number as argument 1 of type string/);
+    rejects("println(sqrt(\"a\"))", /Cannot pass string as argument 1/);
   });
 
   test("variadic builtins accept any arity", () => {
-    clean('print()\nprint(1)\nprint(1, "a", true)');
-    clean("print(max(1, 2, 3))");
+    clean('println()\nprintln(1)\nprintln(1, "a", true)');
+    clean("println(max(1, 2, 3))");
   });
 
   test("importing from the prelude is a legal no-op", () => {
-    clean("from prelude import map, reduce, type\nprint(type(1))");
+    clean("from prelude import map, reduce, type\nprintln(type(1))");
   });
 
   test("an unknown prelude name is reported", () => {
@@ -453,7 +453,7 @@ describe("modules and the prelude", () => {
 // checker changes were needed. these tests prove the body is really visited.
 describe("lambdas", () => {
   test("a lambda satisfies a function type", () => {
-    clean("let f: fn(number): number = (a) -> a * 2\nprint(f(2))");
+    clean("let f: fn(number): number = (a) -> a * 2\nprintln(f(2))");
   });
 
   test("a type error inside a lambda body is reported", () => {
@@ -480,7 +480,7 @@ describe("lambdas", () => {
   });
 
   test("a lambda passed to a prelude builtin checks clean", () => {
-    clean("print(map([1, 2], (v) -> v * 2))");
+    clean("println(map([1, 2], (v) -> v * 2))");
   });
 });
 
@@ -543,7 +543,7 @@ describe("error reporting", () => {
 
   test("a bad annotation does not cascade", () => {
     // resolving to any keeps one unknown type from producing errors everywhere
-    const errors = errorsIn("let x: Nope = 1\nprint(x + 1)\nprint(x)");
+    const errors = errorsIn("let x: Nope = 1\nprintln(x + 1)\nprintln(x)");
     assert.equal(errors.length, 1);
     assert.match(errors[0]!, /Unknown type 'Nope'/);
   });
@@ -553,14 +553,14 @@ describe("execute integration", () => {
   // checking is advisory: the evaluator is dynamically typed, so a type error
   // reports alongside whatever the program produced
   test("a type error does not stop execution", () => {
-    const result = execute('let s: string = 42\nprint("still ran")');
+    const result = execute('let s: string = 42\nprintln("still ran")');
     assert.deepEqual(result.output, ["still ran"]);
     assert.equal(result.error, null);
     assert.equal(result.typeErrors.length, 1);
   });
 
   test("a clean program reports no type errors", () => {
-    const result = execute('print("hi")');
+    const result = execute('println("hi")');
     assert.deepEqual(result.typeErrors, []);
   });
 

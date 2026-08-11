@@ -349,7 +349,7 @@ describe("while loops", () => {
 
 describe("for loops", () => {
   test("iterating a collection", () => {
-    const statement: any = first("for x in xs {\n print(x)\n}");
+    const statement: any = first("for x in xs {\n println(x)\n}");
     assert.equal(statement.kind, "for_statement");
     assert.equal(statement.binding, "x");
     assert.equal(sexp(statement.iterable), "xs");
@@ -568,7 +568,7 @@ describe("lambdas", () => {
   });
 
   test("no parameters", () => {
-    const statement: any = first('let f = () -> print("hi")');
+    const statement: any = first('let f = () -> println("hi")');
     assert.deepEqual(statement.value.params, []);
   });
 
@@ -703,7 +703,7 @@ describe("brace disambiguation", () => {
     const match: any = first('let m = match {p: 1} {\n {p} -> p\n}');
     assert.equal(match.value.subject.kind, "object_literal");
 
-    const loop: any = first("for k in {a: 1} {\n print(k)\n}");
+    const loop: any = first("for k in {a: 1} {\n println(k)\n}");
     assert.equal(loop.iterable.kind, "object_literal");
   });
 
@@ -836,7 +836,7 @@ describe("positions", () => {
 describe("sample programs", () => {
   test("the declaration heavy sample parses", () => {
     const source = `if x > 1999.123 {
-  print(x)
+  println(x)
 }
 
 let name = "Gopal" // lol

@@ -4,7 +4,7 @@ import { Lexer } from "./lexer.js";
 const lexer = new Lexer();
 
 let s = `if x > 1999.123 {
-  print(x)
+  println(x)
 }
 
 let name = "Gopal" // lol

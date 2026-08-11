@@ -27,17 +27,23 @@ export const GUIDE: GuideSection[] = [
     snippets: [
       {
         title: "Values and printing",
-        note: "print takes any number of arguments and separates them with spaces.",
+        note:
+          "println writes a line; print leaves it open so successive calls build one. Both take any number of arguments and separate them with spaces.",
         source: `let name = "gpp"
 let version = 0.1
 let ready = true
 
-print("hello from", name)
-print("version", version, "ready:", ready)
+println("hello from", name)
+println("version", version, "ready:", ready)
+
+// print does not end the line, so these build one line together
+print("building ")
+print("one ")
+println("line")
 
 // numbers are all floats under the hood
-print(7 / 2)
-print(7 % 2)`,
+println(7 / 2)
+println(7 % 2)`,
       },
       {
         title: "Bindings are all let",
@@ -46,15 +52,15 @@ print(7 % 2)`,
         source: `let count = 1
 count = count + 1
 count += 1
-print("count:", count)
+println("count:", count)
 
 let shadowed = "outer"
 {
   // a block introduces a scope
   let shadowed = "inner"
-  print(shadowed)
+  println(shadowed)
 }
-print(shadowed)`,
+println(shadowed)`,
       },
       {
         title: "String interpolation",
@@ -63,24 +69,24 @@ print(shadowed)`,
         source: `let name = "gpp"
 let items = ["a", "b", "c"]
 
-print("hello, {name}")
+println("hello, {name}")
 
 // any expression fits, not only a name
-print("{len(items)} items: {join(items, ", ")}")
-print("2 + 3 = {2 + 3}")
-print("first is {items[0]}, last is {items[-1]}")
+println("{len(items)} items: {join(items, ", ")}")
+println("2 + 3 = {2 + 3}")
+println("first is {items[0]}, last is {items[-1]}")
 
 // compare with building the string by hand
 let n = 3
-print("the long way: " + str(n) + " of " + str(len(items)))
-print("the short way: {n} of {len(items)}")
+println("the long way: " + str(n) + " of " + str(len(items)))
+println("the short way: {n} of {len(items)}")
 
 // a hole can hold a string of its own, quotes and all
 let person = {name: "ada", born: 1815}
-print("{person["name"]} was born in {person.born}")
+println("{person["name"]} was born in {person.born}")
 
 // double a brace to write one literally
-print("{{not a hole}}")`,
+println("{{not a hole}}")`,
       },
       {
         title: "Truthiness",
@@ -93,11 +99,11 @@ print("{{not a hole}}")`,
   return "falsy"
 }
 
-print("0      ->", describe(0))
-print("\\"\\"     ->", describe(""))
-print("[]     ->", describe([]))
-print("false  ->", describe(false))
-print("nil    ->", describe(nil))`,
+println("0      ->", describe(0))
+println("\\"\\"     ->", describe(""))
+println("[]     ->", describe([]))
+println("false  ->", describe(false))
+println("nil    ->", describe(nil))`,
       },
       {
         title: "nil",
@@ -106,13 +112,13 @@ print("nil    ->", describe(nil))`,
         source: `let scores = {}
 scores["ada"] = 0
 
-print("missing key:", scores["nobody"])
-print("type:", type(nil))
+println("missing key:", scores["nobody"])
+println("type:", type(nil))
 
 // truthiness cannot tell 0 apart from absent
-print("truthy test says:", !(scores["ada"]))
+println("truthy test says:", !(scores["ada"]))
 // comparing against nil can
-print("nil test says:", scores["ada"] != nil)`,
+println("nil test says:", scores["ada"] != nil)`,
       },
     ],
   },
@@ -137,7 +143,7 @@ print("nil test says:", scores["ada"] != nil)`,
 }
 
 for n in [3, -2, 0] {
-  print(n, "is", sign(n))
+  println(n, "is", sign(n))
 }`,
       },
       {
@@ -145,15 +151,15 @@ for n in [3, -2, 0] {
         note:
           "for iterates arrays, strings and object keys. while takes any condition. break and continue work in both.",
         source: `for item in ["a", "b", "c"] {
-  print("item:", item)
+  println("item:", item)
 }
 
 for letter in "hi" {
-  print("letter:", letter)
+  println("letter:", letter)
 }
 
 for key in {x: 1, y: 2} {
-  print("key:", key)
+  println("key:", key)
 }
 
 let n = 0
@@ -165,7 +171,7 @@ while n < 5 {
   if n == 4 {
     break
   }
-  print("n =", n)
+  println("n =", n)
 }`,
       },
       {
@@ -181,7 +187,7 @@ while n < 5 {
 }
 
 for n in [1, 2, 3] {
-  print(n, "is", label(n))
+  println(n, "is", label(n))
 }`,
       },
       {
@@ -201,12 +207,12 @@ for n in [1, 2, 3] {
 }
 
 for n in [7, -7, 0] {
-  print(n, "is", sign(n))
+  println(n, "is", sign(n))
 }
 
 // it composes like any other expression
 let n = 3
-print("n is " + if n % 2 == 0 { "even" } else { "odd" })
+println("n is " + if n % 2 == 0 { "even" } else { "odd" })
 
 // a branch yields its own last statement, so it can do work first
 let verdict = if n > 2 {
@@ -215,7 +221,7 @@ let verdict = if n > 2 {
 } else {
   "left alone"
 }
-print(verdict)`,
+println(verdict)`,
       },
       {
         title: "Guarded return",
@@ -228,13 +234,13 @@ print(verdict)`,
 }
 
 for n in [-3, 0, 3] {
-  print(n, "is", classify(n))
+  println(n, "is", classify(n))
 }
 
 // a bare return may be guarded too, to leave early
 fn describe(items) {
   return if len(items) == 0
-  print("first item:", items[0])
+  println("first item:", items[0])
 }
 
 describe([])
@@ -267,8 +273,8 @@ fn is_odd(n) {
   return is_even(n - 1)
 }
 
-print("4 even?", is_even(4))
-print("7 odd? ", is_odd(7))`,
+println("4 even?", is_even(4))
+println("7 odd? ", is_odd(7))`,
       },
       {
         title: "Implicit return",
@@ -289,9 +295,9 @@ fn nothing() {
   let unused = 1
 }
 
-print(double(21))
-print(early(-1), "/", early(1))
-print("ends in let:", nothing())`,
+println(double(21))
+println(early(-1), "/", early(1))
+println("ends in let:", nothing())`,
       },
       {
         title: "Lambdas",
@@ -301,20 +307,20 @@ print("ends in let:", nothing())`,
 let greet = () -> "hello"
 let hypot2 = (a, b) -> a*a + b*b
 
-print(square(5))
-print(greet())
-print(hypot2(3, 4))
+println(square(5))
+println(greet())
+println(hypot2(3, 4))
 
 // a brace body can hold several statements
 let describe = (x, y) -> {
-  print("comparing", x, "and", y)
+  println("comparing", x, "and", y)
   x + y
 }
-print(describe(1, 2))
+println(describe(1, 2))
 
 // to return an object literal, wrap it in parentheses
 let point = (x) -> ({x: x, y: 0})
-print(point(3))`,
+println(point(3))`,
       },
       {
         title: "Closures",
@@ -326,7 +332,7 @@ print(point(3))`,
 
 let add5 = adder(5)
 let add10 = adder(10)
-print(add5(1), add10(1))
+println(add5(1), add10(1))
 
 fn counter() {
   let count = 0
@@ -337,7 +343,7 @@ fn counter() {
 }
 
 let next = counter()
-print(next(), next(), next())`,
+println(next(), next(), next())`,
       },
       {
         title: "Higher order functions",
@@ -349,9 +355,9 @@ let evens = filter(numbers, (n) -> n % 2 == 0)
 let squares = map(evens, (n) -> n * n)
 let total = reduce(squares, (a, b) -> a + b, 0)
 
-print("evens:  ", evens)
-print("squares:", squares)
-print("total:  ", total)`,
+println("evens:  ", evens)
+println("squares:", squares)
+println("total:  ", total)`,
       },
     ],
   },
@@ -367,18 +373,18 @@ print("total:  ", total)`,
           "Index from zero, or from the end with a negative index. push returns a new array rather than mutating.",
         source: `let xs = [3, 1, 2]
 
-print("first:", xs[0])
-print("last: ", xs[-1])
-print("size: ", len(xs))
+println("first:", xs[0])
+println("last: ", xs[-1])
+println("size: ", len(xs))
 
 // push returns a new array
 let more = push(xs, 4)
-print("original:", xs)
-print("extended:", more)
+println("original:", xs)
+println("extended:", more)
 
-print("reversed:", reverse(xs))
-print("joined:  ", join(xs, " < "))
-print("contains 2?", contains(xs, 2))`,
+println("reversed:", reverse(xs))
+println("joined:  ", join(xs, " < "))
+println("contains 2?", contains(xs, 2))`,
       },
       {
         title: "Objects",
@@ -386,15 +392,15 @@ print("contains 2?", contains(xs, 2))`,
           "Objects are open: assigning a property that does not exist adds it. The checker tracks the shape, so a mistyped field name is caught.",
         source: `let person = {name: "ada", born: 1815}
 
-print(person.name)
-print(person["born"])
+println(person.name)
+println(person["born"])
 
 // assigning a new key grows the object
 person.field = "mathematics"
-print(keys(person))
-print(values(person))
+println(keys(person))
+println(values(person))
 
-// print(person.nmae)   // uncomment: the checker knows the shape,
+// println(person.nmae)   // uncomment: the checker knows the shape,
                         // so a typo is an error rather than nil`,
       },
 
@@ -410,14 +416,14 @@ for item in ["apples", "pears", "plums"] {
   let count = stock[item]
 
   if count == nil {
-    print(item, "- not stocked")
+    println(item, "- not stocked")
   } else {
-    print(item, "-", count, "in stock")
+    println(item, "-", count, "in stock")
   }
 }
 
 // the difference matters: pears are stocked, just empty
-print("truthiness would hide pears:", !(stock["pears"]))`,
+println("truthiness would hide pears:", !(stock["pears"]))`,
       },
       {
         title: "Destructuring",
@@ -425,24 +431,24 @@ print("truthiness would hide pears:", !(stock["pears"]))`,
           "Pull fields out of an object by name, or elements out of an array by position. A rest binding captures what is left.",
         source: `let config = {host: "localhost", port: 8080}
 let {host, port} = config
-print(host, port)
+println(host, port)
 
 let [first, second, ...rest] = [1, 2, 3, 4, 5]
-print("first:", first)
-print("second:", second)
-print("rest:  ", rest)`,
+println("first:", first)
+println("second:", second)
+println("rest:  ", rest)`,
       },
       {
         title: "Equality is structural",
         note:
           "Arrays and objects compare by content, not identity, so two separately built values can be equal.",
-        source: `print([1, 2] == [1, 2])
-print({a: 1} == {a: 1})
-print([1, 2] == [2, 1])
+        source: `println([1, 2] == [1, 2])
+println({a: 1} == {a: 1})
+println([1, 2] == [2, 1])
 
 // which makes contains work on nested values
 let pairs = [[1, 2], [3, 4]]
-print(contains(pairs, [3, 4]))`,
+println(contains(pairs, [3, 4]))`,
       },
     ],
   },
@@ -467,11 +473,11 @@ print(contains(pairs, [3, 4]))`,
   }
 }
 
-print(describe([]))
-print(describe([42]))
-print(describe([3, 4]))
-print(describe([1, 2, 3]))
-print(describe("hello"))`,
+println(describe([]))
+println(describe([42]))
+println(describe([3, 4]))
+println(describe([1, 2, 3]))
+println(describe("hello"))`,
       },
       {
         title: "Guards",
@@ -485,9 +491,9 @@ print(describe("hello"))`,
   }
 }
 
-print(compare({x: 5, y: 2}))
-print(compare({x: 1, y: 9}))
-print(compare({x: 3, y: 3}))`,
+println(compare({x: 5, y: 2}))
+println(compare({x: 1, y: 9}))
+println(compare({x: 3, y: 3}))`,
       },
       {
         title: "Match is an expression",
@@ -502,17 +508,17 @@ let message = match code {
   _   -> "unknown"
 }
 
-print(code, message)
+println(code, message)
 
 // a block bodied arm yields its last statement too
 let verdict = match 7 {
   n if n > 5 -> {
-    print("checking", n)
+    println("checking", n)
     "big"
   }
   _ -> "small"
 }
-print(verdict)`,
+println(verdict)`,
       },
     ],
   },
@@ -536,7 +542,7 @@ let label: string = "ready"
 let ratios: number[] = [0.5, 1.5]
 let maybe: number | nil = nil
 
-print(count, label, ratios, maybe)`,
+println(count, label, ratios, maybe)`,
       },
       {
         title: "Functions and any",
@@ -546,13 +552,13 @@ print(count, label, ratios, maybe)`,
 fn loose(x) {
   return str(x)
 }
-print(loose(1), loose("two"), loose(true))
+println(loose(1), loose("two"), loose(true))
 
 // annotated, so arguments are checked
 fn strict(n: number): number {
   return n * 2
 }
-print(strict(21))
+println(strict(21))
 // strict("nope")       // uncomment: cannot pass string as argument 1`,
       },
       {
@@ -569,9 +575,9 @@ fn magnitude(p: Point): number {
   return sqrt(p.x * p.x + p.y * p.y)
 }
 
-print(magnitude({x: 3, y: 4}))
-print(magnitude({x: 6, y: 8, label: "far", extra: true}))
-// print(magnitude({x: 1}))   // uncomment: missing 'y' required by Point`,
+println(magnitude({x: 3, y: 4}))
+println(magnitude({x: 6, y: 8, label: "far", extra: true}))
+// println(magnitude({x: 1}))   // uncomment: missing 'y' required by Point`,
       },
     ],
   },
@@ -585,27 +591,98 @@ print(magnitude({x: 6, y: 8, label: "far", extra: true}))
       {
         title: "The prelude",
         note:
-          "print, len, type, the array helpers and the maths functions need no import. Writing the import out is legal and does nothing.",
+          "println, len, type, the array helpers and the maths functions need no import. Writing the import out is legal and does nothing.",
         source: `from prelude import map, reduce, type
 
-print(type(1), type("s"), type(true), type([]), type({}), type(nil))
-print(len("hello"), len([1, 2]), len({a: 1}))
-print(upper("shout"), lower("WHISPER"), trim("  tidy  "))
-print(split("a,b,c", ","))
-print(abs(-3), floor(2.7), ceil(2.1), sqrt(16), max(1, 5, 3))`,
+println(type(1), type("s"), type(true), type([]), type({}), type(nil))
+println(len("hello"), len([1, 2]), len({a: 1}))
+println(upper("shout"), lower("WHISPER"), trim("  tidy  "))
+println(split("a,b,c", ","))
+println(abs(-3), floor(2.7), ceil(2.1), sqrt(16), max(1, 5, 3))`,
+      },
+      {
+        title: "Sorting",
+        note:
+          "sort uses a natural order: numbers numerically, strings lexicographically. Pass a comparator to override it, or use sort_by to order by a derived key.",
+        source: `let numbers = [5, 3, 9, 1]
+let words = ["pear", "apple", "fig"]
+
+println(sort(numbers))
+println(sort(words))
+
+// a comparator returns a negative number to put a before b
+println(sort(numbers, (a, b) -> b - a))
+
+// sort_by reads better when ordering records by a field
+let people = [
+  {name: "carol", age: 41},
+  {name: "alice", age: 36},
+  {name: "bob", age: 45}
+]
+
+for person in sort_by(people, (p) -> p.age) {
+  println("{person.name} is {person.age}")
+}
+
+// sorting returns a new array, so the original is untouched
+println("original still:", numbers)`,
+      },
+      {
+        title: "Searching and aggregating",
+        note:
+          "find returns the first match or nil, index_of returns a position or -1, and any/all answer questions about the whole array.",
+        source: `let numbers = [4, 8, 15, 16, 23, 42]
+
+println("first over 10:", find(numbers, (n) -> n > 10))
+println("nothing matches:", find(numbers, (n) -> n > 99))
+
+println("position of 15:", index_of(numbers, 15))
+println("not present:", index_of(numbers, 7))
+
+println("any odd?", any(numbers, (n) -> n % 2 == 1))
+println("all positive?", all(numbers, (n) -> n > 0))
+
+println("sum:", sum(numbers))
+println("unique:", unique([1, 2, 2, 3, 1]))
+println("flatten:", flatten([[1, 2], [3], 4]))
+println("zip:", zip(["a", "b"], [1, 2]))`,
+      },
+      {
+        title: "Working with text",
+        note:
+          "The string helpers cover the everyday cases. substring accepts negative indices, counting from the end the way array indexing does.",
+        source: `let title = "  the gpp language  "
+let clean = trim(title)
+
+println("[{clean}]")
+println(upper(clean))
+println(replace(clean, " ", "-"))
+println("starts with 'the'?", starts_with(clean, "the"))
+println("substring:", substring(clean, 4, 7))
+println("last four:", substring(clean, -4, len(clean)))
+
+// building a table with pad
+let rows = [["name", "qty"], ["apples", "12"], ["pears", "3"]]
+for row in rows {
+  println(pad_end(row[0], 10, ".") + row[1])
+}
+
+// characters and codes
+println(chars("hi"))
+println(ord("a"), chr(98))`,
       },
       {
         title: "The math module",
         note: "Other modules need a real import, and the names come into scope.",
         source: `from math import pi, sin, cos, pow
 
-print("pi:", floor(pi * 1000) / 1000)
-print("2^10:", pow(2, 10))
+println("pi:", floor(pi * 1000) / 1000)
+println("2^10:", pow(2, 10))
 
 fn hypotenuse(a, b) {
   return sqrt(pow(a, 2) + pow(b, 2))
 }
-print("3,4 triangle:", hypotenuse(3, 4))`,
+println("3,4 triangle:", hypotenuse(3, 4))`,
       },
       {
         title: "Collections",
@@ -616,27 +693,27 @@ print("3,4 triangle:", hypotenuse(3, 4))`,
 let s = stack()
 s.push(1)
 s.push(2)
-print("stack:", s.pop(), s.peek())
+println("stack:", s.pop(), s.peek())
 
 let q = queue()
 q.push("first")
 q.push("second")
-print("queue:", q.pop(), q.peek())
+println("queue:", q.pop(), q.peek())
 
 let seen = set([1, 2, 2, 3])
-print("set size:", seen.size(), "has 2:", seen.contains(2))
+println("set size:", seen.size(), "has 2:", seen.contains(2))
 
 let ages = map([])
 ages.set("ada", 36)
 ages.set(1815, "a numeric key")
-print("map:", ages.get("ada"), "/", ages.get(1815))
+println("map:", ages.get("ada"), "/", ages.get(1815))
 
 let list = linked_list()
 for v in [1, 2, 3] {
   list.push(v)
 }
 list.reverse()
-print("list:", list.to_array())`,
+println("list:", list.to_array())`,
       },
       {
         title: "Exporting",
@@ -648,7 +725,7 @@ print("list:", list.to_array())`,
 
 let unit = "cm2"
 
-print(area(3, 4), unit)
+println(area(3, 4), unit)
 
 export area, unit`,
       },
@@ -677,7 +754,7 @@ for word in split(text, " ") {
 // keys come back in insertion order
 for word in keys(counts) {
   if counts[word] > 1 {
-    print(word, "appears", counts[word], "times")
+    println(word, "appears", counts[word], "times")
   }
 }`,
       },
@@ -702,9 +779,9 @@ fn fib(n) {
   value
 }
 
-print(fib(10))
-print(fib(40))
-print("cached", len(keys(memo)), "values")`,
+println(fib(10))
+println(fib(40))
+println("cached", len(keys(memo)), "values")`,
       },
       {
         title: "A tiny pipeline",
@@ -721,8 +798,8 @@ let names = map(londoners, (p) -> upper(p.name))
 let ages = map(londoners, (p) -> p.age)
 let mean = reduce(ages, (a, b) -> a + b, 0) / len(ages)
 
-print("londoners:", join(names, ", "))
-print("mean age: ", mean)
+println("londoners:", join(names, ", "))
+println("mean age: ", mean)
 
 for person in people {
   let {name, age} = person
@@ -730,7 +807,7 @@ for person in people {
     n if n < 40 -> "thirties"
     _           -> "forties"
   }
-  print(name, "is in their", stage)
+  println(name, "is in their", stage)
 }`,
       },
     ],

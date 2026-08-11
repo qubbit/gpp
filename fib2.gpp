@@ -23,6 +23,6 @@ fn fib2(n) {
   return v
 }
 
-print(fib2(10))
-print(fib2(30))
-print("memoised", len(keys(memo)), "values")
+println(fib2(10))
+println(fib2(30))
+println("memoised", len(keys(memo)), "values")
