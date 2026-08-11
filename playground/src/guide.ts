@@ -113,7 +113,7 @@ println("nil    ->", describe(nil))`,
 scores["ada"] = 0
 
 println("missing key:", scores["nobody"])
-println("type:", type(nil))
+println("type:", type_of(nil))
 
 // truthiness cannot tell 0 apart from absent
 println("truthy test says:", !(scores["ada"]))
@@ -616,9 +616,9 @@ fn double_or_zero(x: number | nil): number {
 
 println(double_or_zero(5), double_or_zero(nil))
 
-// testing with type() works the same way
+// testing with type_of() works the same way
 fn render(v: number | string): string {
-  if type(v) == "number" {
+  if type_of(v) == "number" {
     return "number: {v + 0}"
   }
   return "string: {upper(v)}"
@@ -700,9 +700,9 @@ println(magnitude({x: 6, y: 8, label: "far", extra: true}))
         title: "The prelude",
         note:
           "println, len, type, the array helpers and the maths functions need no import. Writing the import out is legal and does nothing.",
-        source: `from prelude import map, reduce, type
+        source: `from prelude import map, reduce, type_of
 
-println(type(1), type("s"), type(true), type([]), type({}), type(nil))
+println(type_of(1), type_of("s"), type_of(true), type_of([]), type_of({}), type_of(nil))
 println(len("hello"), len([1, 2]), len({a: 1}))
 println(upper("shout"), lower("WHISPER"), trim("  tidy  "))
 println(split("a,b,c", ","))

@@ -89,7 +89,7 @@ fn set(initial) {
   let count = 0
 
   fn key_of(value) {
-    return type(value) + ":" + str(value)
+    return type_of(value) + ":" + str(value)
   }
 
   let api = {
@@ -158,7 +158,7 @@ fn map_new(initial) {
   let count = 0
 
   fn key_of(key) {
-    return type(key) + ":" + str(key)
+    return type_of(key) + ":" + str(key)
   }
 
   let api = {

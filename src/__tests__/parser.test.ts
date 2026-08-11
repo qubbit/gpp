@@ -537,8 +537,8 @@ describe("imports and exports", () => {
 
   // `type` is a prelude export, so keywords must be importable as names
   test("a keyword may be imported as a name", () => {
-    const statement: any = first("from prelude import map, reduce, type");
-    assert.deepEqual(statement.names.map((n: any) => n.name), ["map", "reduce", "type"]);
+    const statement: any = first("from prelude import map, reduce, type_of");
+    assert.deepEqual(statement.names.map((n: any) => n.name), ["map", "reduce", "type_of"]);
   });
 
   test("exporting names", () => {
@@ -880,7 +880,7 @@ interface Point {
 
 from "abc" import xyz
 from math import sin, cos, tan, pi
-from prelude import map, reduce, type
+from prelude import map, reduce, type_of
 
 let zz = {a: 1, b: "hello", c: []}
 let {a} = zz

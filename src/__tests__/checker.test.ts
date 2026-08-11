@@ -443,7 +443,7 @@ describe("modules and the prelude", () => {
   });
 
   test("importing from the prelude is a legal no-op", () => {
-    clean("from prelude import map, reduce, type\nprintln(type(1))");
+    clean("from prelude import map, reduce, type_of\nprintln(type_of(1))");
   });
 
   test("an unknown prelude name is reported", () => {
@@ -510,8 +510,8 @@ describe("narrowing", () => {
   });
 
   test("a type test refines the branch", () => {
-    clean('fn f(x: number | string) {\n if type(x) == "number" {\n  let n: number = x\n }\n}');
-    clean('fn f(x: number | string) {\n if type(x) != "number" {\n  let s: string = x\n }\n}');
+    clean('fn f(x: number | string) {\n if type_of(x) == "number" {\n  let n: number = x\n }\n}');
+    clean('fn f(x: number | string) {\n if type_of(x) != "number" {\n  let s: string = x\n }\n}');
   });
 
   // the early exit idiom: reaching the next line means the guard was false
@@ -526,7 +526,7 @@ describe("narrowing", () => {
       'fn f(x: number | nil): string {\n if x == nil {\n  return "none"\n }\n return "got {x * 2}"\n}',
     );
     clean(
-      'fn f(v: number | string): string {\n if type(v) == "number" {\n  return "n"\n }\n return upper(v)\n}',
+      'fn f(v: number | string): string {\n if type_of(v) == "number" {\n  return "n"\n }\n return upper(v)\n}',
     );
   });
 

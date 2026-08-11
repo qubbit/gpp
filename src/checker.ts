@@ -98,7 +98,7 @@ const PRELUDE_TYPES: Record<string, Type> = {
   print: functionOf([], VOID),
 
   // reflection
-  type: functionOf([ANY], STRING),
+  type_of: functionOf([ANY], STRING),
   len: functionOf([ANY], NUMBER),
 
   // arrays
@@ -327,7 +327,7 @@ export class Checker {
         return { whenTrue, whenFalse };
       }
 
-      // `type(x) == "number"` and its negation
+      // `type_of(x) == "number"` and its negation
       const typeTest = this.asTypeTest(left, right);
       if (typeTest) {
         const current = scope.lookup(typeTest.name);
@@ -366,7 +366,7 @@ export class Checker {
     return null;
   }
 
-  /** the name and expected type in `type(x) == "number"`, either way round. */
+  /** the name and expected type in `type_of(x) == "number"`, either way round. */
   private asTypeTest(
     left: Expression,
     right: Expression,
@@ -375,7 +375,7 @@ export class Checker {
       if (
         call.kind === "call_expression" &&
         call.callee.kind === "identifier" &&
-        call.callee.name === "type" &&
+        call.callee.name === "type_of" &&
         call.args.length === 1 &&
         call.args[0]!.kind === "identifier" &&
         literal.kind === "string_literal"
@@ -387,7 +387,7 @@ export class Checker {
     return read(left, right) ?? read(right, left);
   }
 
-  /** the members of a type that `type()` would not report as `name`. */
+  /** the members of a type that `type_of()` would not report as `name`. */
   private excludeTypeName(type: Type, name: string): Type {
     if (isAny(type)) return type;
     const matching = narrowToTypeName(type, name);

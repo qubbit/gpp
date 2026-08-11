@@ -64,7 +64,7 @@ describe("literals and operators", () => {
 
   test("nil is a literal", () => {
     assert.equal(prints("println(nil)"), "nil");
-    assert.equal(prints("println(type(nil))"), "nil");
+    assert.equal(prints("println(type_of(nil))"), "nil");
   });
 
   test("a missing key compares equal to nil", () => {
@@ -850,7 +850,7 @@ describe("prelude", () => {
 
   test("type reports the runtime type", () => {
     assert.deepEqual(
-      output('println(type(1))\nprintln(type("s"))\nprintln(type(true))\nprintln(type([]))\nprintln(type({}))\nprintln(type(print))'),
+      output('println(type_of(1))\nprintln(type_of("s"))\nprintln(type_of(true))\nprintln(type_of([]))\nprintln(type_of({}))\nprintln(type_of(print))'),
       ["number", "string", "bool", "array", "object", "function"],
     );
   });
@@ -906,7 +906,7 @@ describe("modules", () => {
   // the prelude is auto imported, so spelling the import out changes nothing
   test("importing from the prelude is a legal no-op", () => {
     assert.equal(
-      prints("from prelude import map, reduce, type\nprintln(type(1))"),
+      prints("from prelude import map, reduce, type_of\nprintln(type_of(1))"),
       "number",
     );
   });

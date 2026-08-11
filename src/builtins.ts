@@ -110,7 +110,7 @@ export function createPrelude(
     }),
 
     // --- reflection ---
-    type: native("type", 1, ([value]) => typeName(value as Value)),
+    type_of: native("type_of", 1, ([value]) => typeName(value as Value)),
 
     len: native("len", 1, ([value]) => {
       if (typeof value === "string") return value.length;

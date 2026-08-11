@@ -256,8 +256,8 @@ export function exclude(type: Type, unwanted: Type): Type {
 }
 
 /**
- * keeps only the members of `type` that the `type()` builtin would report as
- * `name`, which is what a `type(x) == "number"` test proves.
+ * keeps only the members of `type` that the `type_of()` builtin would report as
+ * `name`, which is what a `type_of(x) == "number"` test proves.
  */
 export function narrowToTypeName(type: Type, name: string): Type {
   // an `any` value could be anything, so a positive test does tell us its type
@@ -273,7 +273,7 @@ export function narrowToTypeName(type: Type, name: string): Type {
   return matches(type) ? type : NEVER;
 }
 
-/** the string `type()` reports for a value of this type, where one is known. */
+/** the string `type_of()` reports for a value of this type, where one is known. */
 function runtimeTypeName(type: Type): string | null {
   switch (type.kind) {
     case "primitive":
@@ -290,7 +290,7 @@ function runtimeTypeName(type: Type): string | null {
   }
 }
 
-/** the type a `type()` string denotes, for narrowing an `any`. */
+/** the type a `type_of()` string denotes, for narrowing an `any`. */
 function fromTypeName(name: string): Type | null {
   switch (name) {
     case "number":
