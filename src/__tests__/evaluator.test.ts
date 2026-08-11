@@ -240,6 +240,77 @@ describe("functions", () => {
   });
 });
 
+// lambdas desugar to function_expression in the parser, so the evaluator needs
+// no lambda-specific handling. these tests exist to prove that.
+describe("lambdas", () => {
+  test("an expression body returns implicitly", () => {
+    assert.equal(prints("let sq = (a) -> a*a\nprint(sq(5))"), "25");
+  });
+
+  test("no parameters", () => {
+    assert.equal(prints('let hi = () -> "hello"\nprint(hi())'), "hello");
+  });
+
+  test("several parameters", () => {
+    assert.equal(prints("let f = (a, b) -> a*a + b*b\nprint(f(3, 4))"), "25");
+  });
+
+  test("a brace body needs an explicit return", () => {
+    assert.equal(prints("let f = (x) -> {\n return x * 2\n}\nprint(f(21))"), "42");
+    // no return, so it falls off the end and yields nil
+    assert.equal(prints("let f = (x) -> {\n x + 1\n}\nprint(f(1))"), "nil");
+  });
+
+  test("a lambda captures its defining scope", () => {
+    assert.equal(
+      prints("fn adder(n) {\n return (x) -> x + n\n}\nlet add5 = adder(5)\nprint(add5(10))"),
+      "15",
+    );
+  });
+
+  test("each loop turn gets its own capture", () => {
+    assert.deepEqual(
+      output("let fns = []\nfor i in [1, 2] {\n fns = push(fns, () -> i)\n}\nfor f in fns {\n print(f())\n}"),
+      ["1", "2"],
+    );
+  });
+
+  test("lambdas curry", () => {
+    assert.equal(prints("let add = (a) -> (b) -> a + b\nprint(add(2)(3))"), "5");
+  });
+
+  test("a lambda can be called immediately", () => {
+    assert.equal(prints("print(((a) -> a*2)(21))"), "42");
+  });
+
+  test("lambdas work with the prelude's higher order functions", () => {
+    assert.equal(prints("print(map([1, 2, 3], (v) -> v * 2))"), "[2, 4, 6]");
+    assert.equal(
+      prints("print(reduce(filter(range(1, 11), (n) -> n % 2 == 0), (a, b) -> a + b, 0))"),
+      "30",
+    );
+  });
+
+  test("an arity mismatch is reported", () => {
+    // anonymous, so the message says "This function"
+    assert.match(
+      errorOf("let f = (a) -> a\nf(1, 2)") ?? "",
+      /This function expects 1 argument\(s\) but received 2/,
+    );
+  });
+
+  test("a lambda may be a match arm body", () => {
+    assert.equal(
+      prints('let g = match 1 {\n 1 -> (a) -> a*a\n _ -> (a) -> a\n}\nprint(g(6))'),
+      "36",
+    );
+  });
+
+  test("returning an object literal needs parentheses", () => {
+    assert.equal(prints("let f = (x) -> ({a: x})\nprint(f(1))"), "{a: 1}");
+  });
+});
+
 describe("collections", () => {
   test("array indexing", () => {
     assert.equal(prints("print([10,20,30][1])"), "20");

@@ -449,6 +449,41 @@ describe("modules and the prelude", () => {
   });
 });
 
+// lambdas are function_expression by the time the checker sees them, so no
+// checker changes were needed. these tests prove the body is really visited.
+describe("lambdas", () => {
+  test("a lambda satisfies a function type", () => {
+    clean("let f: fn(number): number = (a) -> a * 2\nprint(f(2))");
+  });
+
+  test("a type error inside a lambda body is reported", () => {
+    rejects('let f = (a) -> a - "s"', /Cannot apply '-'/);
+  });
+
+  test("an annotated parameter is checked", () => {
+    clean("let f = (a: number) -> a * 2");
+    rejects('let f = (a: number) -> a\nf("s")', /Cannot pass string as argument 1/);
+  });
+
+  test("an unannotated parameter stays any", () => {
+    clean('let f = (a) -> a * 2\nf(1)\nf("s")');
+  });
+
+  test("a brace body is checked like a function body", () => {
+    rejects('let f = (a) -> {\n return a - "s"\n}', /Cannot apply '-'/);
+  });
+
+  test("the enclosing return context is restored", () => {
+    // a lambda sets expectedReturn while checking its body; a top level return
+    // afterwards must still be an error
+    rejects("let f = (a) -> a\nreturn 1", /Cannot return from outside a function/);
+  });
+
+  test("a lambda passed to a prelude builtin checks clean", () => {
+    clean("print(map([1, 2], (v) -> v * 2))");
+  });
+});
+
 describe("nil", () => {
   test("the literal has type nil", () => {
     rejects("let n: number = nil", /Cannot assign nil to number/);

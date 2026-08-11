@@ -552,6 +552,125 @@ describe("imports and exports", () => {
   });
 });
 
+describe("lambdas", () => {
+  test("an expression body desugars to a returning block", () => {
+    const statement: any = first("let f = (a) -> a*a");
+    assert.equal(statement.value.kind, "function_expression");
+    assert.equal(statement.value.name, null);
+    assert.deepEqual(statement.value.params.map((p: any) => p.name), ["a"]);
+
+    // the desugar is the whole design, so pin the shape rather than infer it
+    const body = statement.value.body;
+    assert.equal(body.kind, "block_statement");
+    assert.equal(body.body.length, 1);
+    assert.equal(body.body[0].kind, "return_statement");
+    assert.equal(sexp(body.body[0].value), "(a * a)");
+  });
+
+  test("no parameters", () => {
+    const statement: any = first('let f = () -> print("hi")');
+    assert.deepEqual(statement.value.params, []);
+  });
+
+  test("several parameters", () => {
+    const statement: any = first("let f = (a, b) -> a*a + b*b");
+    assert.deepEqual(statement.value.params.map((p: any) => p.name), ["a", "b"]);
+  });
+
+  // parseParameters is reused wholesale, so annotations come for free
+  test("parameters may be annotated", () => {
+    const statement: any = first("let f = (a: number) -> a");
+    assert.equal(statement.value.params[0].type.name, "number");
+  });
+
+  test("the body extends as far as the expression does", () => {
+    const statement: any = first("let f = (a) -> a + 1 * 2");
+    assert.equal(sexp(statement.value.body.body[0].value), "(a + (1 * 2))");
+  });
+
+  test("lambdas nest to the right", () => {
+    const statement: any = first("let f = (a) -> (b) -> a + b");
+    const outer = statement.value.body.body[0].value;
+    assert.equal(outer.kind, "function_expression");
+    assert.deepEqual(outer.params.map((p: any) => p.name), ["b"]);
+  });
+
+  test("a lambda may be an argument or an element", () => {
+    const call: any = first("map(xs, (a) -> a*2)");
+    assert.equal(call.expression.args[1].kind, "function_expression");
+
+    const array: any = first("let xs = [(a) -> a, 2]");
+    assert.equal(array.value.elements[0].kind, "function_expression");
+  });
+
+  test("a brace body is a block, used as written", () => {
+    const statement: any = first("let f = (x) -> {\n return x\n}");
+    const body = statement.value.body;
+    assert.equal(body.kind, "block_statement");
+    assert.equal(body.body[0].kind, "return_statement");
+  });
+
+  // the brace opens a body, so an object literal needs parentheses
+  test("returning an object literal requires parentheses", () => {
+    const statement: any = first("let f = (x) -> ({a: 1})");
+    assert.equal(statement.value.body.body[0].value.kind, "object_literal");
+    assert.throws(() => ast("let f = (x) -> { a: 1 }"), ParseError);
+  });
+
+  test("a lambda may be a match arm body", () => {
+    const statement: any = first('let g = match 1 {\n 1 -> (a) -> a*a\n _ -> 0\n}');
+    assert.equal(statement.value.arms[0].body.kind, "function_expression");
+  });
+
+  test("positions point at the parens and the body", () => {
+    const statement: any = first("let f = (a) -> a*a");
+    // the lambda starts at its `(`
+    assert.equal(statement.value.column, 9);
+    // the synthetic nodes carry the body's position, since the user wrote
+    // neither a brace nor a return
+    assert.equal(statement.value.body.column, 16);
+    assert.equal(statement.value.body.body[0].column, 16);
+  });
+
+  test("an unparenthesised parameter list is rejected", () => {
+    assert.throws(() => ast("let f = (1) -> x"), ParseError);
+  });
+});
+
+// a lambda must never be mistaken for a grouped expression
+describe("grouping still parses as grouping", () => {
+  test("a parenthesised expression is unwrapped", () => {
+    assert.equal(expr("(a)"), "a");
+    assert.equal(expr("((a))"), "a");
+  });
+
+  test("parentheses still override precedence", () => {
+    assert.equal(expr("(a + b) * c"), "((a + b) * c)");
+  });
+
+  test("a parenthesised argument is not a lambda", () => {
+    const statement: any = first("f((a), 2)");
+    assert.equal(statement.expression.args[0].kind, "identifier");
+  });
+
+  test("brackets and braces inside parentheses are unaffected", () => {
+    assert.equal(expr("([1, 2])"), "[1, 2]");
+    assert.equal(expr("({a: 1})"), "{a: 1}");
+  });
+
+  test("a following operator does not make a lambda", () => {
+    assert.equal(expr("(a) + 1"), "(a + 1)");
+  });
+
+  test("an unterminated group reports its own error", () => {
+    // the scan hits eof, declines, and the normal path produces the message
+    assert.throws(
+      () => ast("let x = (a"),
+      /Expected \) to close a grouped expression/,
+    );
+  });
+});
+
 describe("brace disambiguation", () => {
   // `{` opens a block in statement position and an object literal in expression
   // position, so the header of a control statement must not eat the body
