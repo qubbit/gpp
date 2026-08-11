@@ -89,7 +89,7 @@ describe("share encoding", () => {
   });
 
   test("non ascii source survives the round trip", () => {
-    const source = 'print("héllo ✨ 日本語")';
+    const source = 'println("héllo ✨ 日本語")';
     assert.equal(decode(encode(source)), source);
   });
 

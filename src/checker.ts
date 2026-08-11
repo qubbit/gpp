@@ -54,6 +54,7 @@ export interface CheckResult {
 // polymorphic and gpp has no generics to express it.
 const PRELUDE_TYPES: Record<string, Type> = {
   // output
+  println: functionOf([], VOID),
   print: functionOf([], VOID),
 
   // reflection
@@ -77,9 +78,26 @@ const PRELUDE_TYPES: Record<string, Type> = {
     ANY,
   ),
 
+  // sorting. sort takes an optional comparator, so its arity is not checked
+  sort: functionOf([arrayOf(ANY)], arrayOf(ANY)),
+  sort_by: functionOf([arrayOf(ANY), functionOf([ANY], ANY)], arrayOf(ANY)),
+
+  // searching and aggregating
+  index_of: functionOf([ANY, ANY], NUMBER),
+  find: functionOf([arrayOf(ANY), functionOf([ANY], ANY)], ANY),
+  any: functionOf([arrayOf(ANY), functionOf([ANY], ANY)], BOOL),
+  all: functionOf([arrayOf(ANY), functionOf([ANY], ANY)], BOOL),
+  sum: functionOf([arrayOf(ANY)], NUMBER),
+  unique: functionOf([arrayOf(ANY)], arrayOf(ANY)),
+  flatten: functionOf([arrayOf(ANY)], arrayOf(ANY)),
+  zip: functionOf([arrayOf(ANY), arrayOf(ANY)], arrayOf(ANY)),
+
   // objects
   keys: functionOf([ANY], arrayOf(STRING)),
   values: functionOf([ANY], arrayOf(ANY)),
+  remove: functionOf([ANY, STRING], ANY),
+  has: functionOf([ANY, STRING], BOOL),
+  merge: functionOf([ANY, ANY], ANY),
 
   // strings
   upper: functionOf([STRING], STRING),
@@ -87,6 +105,16 @@ const PRELUDE_TYPES: Record<string, Type> = {
   trim: functionOf([STRING], STRING),
   split: functionOf([STRING, STRING], arrayOf(STRING)),
   join: functionOf([arrayOf(ANY), STRING], STRING),
+  replace: functionOf([STRING, STRING, STRING], STRING),
+  substring: functionOf([STRING, NUMBER, NUMBER], STRING),
+  starts_with: functionOf([STRING, STRING], BOOL),
+  ends_with: functionOf([STRING, STRING], BOOL),
+  repeat: functionOf([STRING, NUMBER], STRING),
+  pad_start: functionOf([STRING, NUMBER, STRING], STRING),
+  pad_end: functionOf([STRING, NUMBER, STRING], STRING),
+  chars: functionOf([STRING], arrayOf(STRING)),
+  ord: functionOf([STRING], NUMBER),
+  chr: functionOf([NUMBER], STRING),
   str: functionOf([ANY], STRING),
   num: functionOf([STRING], NUMBER),
 
@@ -101,7 +129,7 @@ const PRELUDE_TYPES: Record<string, Type> = {
 };
 
 // builtins that take any number of arguments, so arity is not checked
-const VARIADIC = new Set(["print", "min", "max"]);
+const VARIADIC = new Set(["print", "println", "min", "max", "sort"]);
 
 // the collections are written in gpp and return closures over private state.
 // without generics their contents cannot be described, so a constructor is

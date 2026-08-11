@@ -30,10 +30,18 @@ const TYPE_KEYWORDS = ["number", "string", "bool", "any", "void"];
 
 // the prelude is always in scope, so highlighting it helps discoverability
 const BUILTINS = [
-  "print", "type", "len", "push", "pop", "slice", "concat", "reverse",
+  "println", "print", "type", "len", "push", "pop", "slice", "concat", "reverse",
   "contains", "range", "map", "filter", "reduce", "keys", "values",
   "upper", "lower", "trim", "split", "join", "str", "num",
   "abs", "min", "max", "floor", "ceil", "round", "sqrt",
+  // sorting and searching
+  "sort", "sort_by", "index_of", "find", "any", "all", "sum",
+  "unique", "flatten", "zip",
+  // objects
+  "remove", "has", "merge",
+  // strings
+  "replace", "substring", "starts_with", "ends_with", "repeat",
+  "pad_start", "pad_end", "chars", "ord", "chr",
 ];
 
 // constructors from the collections module, highlighted once imported

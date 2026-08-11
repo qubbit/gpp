@@ -71,7 +71,7 @@ while x > 0 {
 }
 
 for item in xs {
-  print(item)
+  println(item)
 }
 
 let negated = -x

@@ -380,7 +380,7 @@ describe("whole programs", () => {
       "let xs = [1, 2, 3]",
       "let first = xs[0]",
       "if first >= 1 {",
-      '  print("ok")',
+      '  println("ok")',
       "}",
     ].join("\n");
 
@@ -388,7 +388,7 @@ describe("whole programs", () => {
       "let", "xs", "=", "[", "1", ",", "2", ",", "3", "]",
       "let", "first", "=", "xs", "[", "0", "]",
       "if", "first", ">=", "1", "{",
-      "print", "(", '"ok"', ")",
+      "println", "(", '"ok"', ")",
       "}",
     ]);
   });

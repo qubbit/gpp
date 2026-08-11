@@ -83,13 +83,24 @@ export class Evaluator {
   private steps = 0;
   private maxSteps = DEFAULT_MAX_STEPS;
   private exported: string[] = [];
+  // text written by `print` that has no newline yet. `println` flushes it, and
+  // so does the end of the run, so a trailing `print` is never swallowed.
+  private pending = "";
 
   constructor() {
     // the prelude is always in scope; programs never import it
     installPrelude(
       this.globals,
       createPrelude(
-        (line) => this.output.push(line),
+        {
+          write: (text) => {
+            this.pending += text;
+          },
+          writeLine: (text) => {
+            this.output.push(this.pending + text);
+            this.pending = "";
+          },
+        },
         (callee, args) => this.callValue(callee, args, 0, 0),
       ),
     );
@@ -97,6 +108,7 @@ export class Evaluator {
 
   run(program: Program, options: RunOptions = {}): RunResult {
     this.output = [];
+    this.pending = "";
     this.steps = 0;
     this.maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
     this.exported = [];
@@ -122,6 +134,12 @@ export class Evaluator {
   }
 
   private result(error: string | null): RunResult {
+    // a `print` with no trailing `println` still produced output
+    if (this.pending) {
+      this.output.push(this.pending);
+      this.pending = "";
+    }
+
     const exports: Record<string, Value> = {};
     for (const name of this.exported) {
       const value = this.globals.get(name);
