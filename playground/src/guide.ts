@@ -175,6 +175,35 @@ while n < 5 {
 }`,
       },
       {
+        title: "Looping with an index or key",
+        note:
+          "A second loop variable binds the position alongside the value: the index for an array or string, the key for an object.",
+        source: `// arrays give you the index
+for i, name in ["ada", "grace", "alan"] {
+  println("{i}: {name}")
+}
+
+// objects give you the key, the way python does
+let config = {host: "localhost", port: 8080, debug: true}
+
+for key, value in config {
+  println("{key} = {value}")
+}
+
+// strings walk their characters
+for i, letter in "gpp" {
+  println("{i} -> {letter}")
+}
+
+// one binding still means the value for an array, the key for an object
+for name in ["ada", "grace"] {
+  println(name)
+}
+for key in config {
+  println(key)
+}`,
+      },
+      {
         title: "Everything is an expression's home",
         note:
           "A function body yields its last statement, so an if can be the whole body. No return needed.",
@@ -751,10 +780,10 @@ for word in split(text, " ") {
   counts[word] += 1
 }
 
-// keys come back in insertion order
-for word in keys(counts) {
-  if counts[word] > 1 {
-    println(word, "appears", counts[word], "times")
+// two bindings walk key and value together, in insertion order
+for word, count in counts {
+  if count > 1 {
+    println("{word} appears {count} times")
   }
 }`,
       },

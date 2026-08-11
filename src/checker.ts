@@ -484,7 +484,19 @@ export class Checker {
         const element = this.elementTypeOf(iterable, statement);
 
         const loopScope = new Scope(scope);
-        loopScope.define(statement.binding, element);
+        if (statement.valueBinding) {
+          // the first name is the index for an array or string, the key for an
+          // object; the second is the element. for an object the element is
+          // its field types rather than its keys, which is what the one
+          // binding form yields.
+          loopScope.define(statement.binding, this.keyTypeOf(iterable));
+          loopScope.define(
+            statement.valueBinding,
+            this.valueTypeOf(iterable, element),
+          );
+        } else {
+          loopScope.define(statement.binding, element);
+        }
 
         this.loopDepth++;
         this.checkBlock(statement.body, loopScope);
@@ -651,6 +663,31 @@ export class Checker {
 
     this.expectedReturn = previousReturn;
     this.loopDepth = previousLoopDepth;
+  }
+
+  /**
+   * the type of the second binding in `for k, v in ...`. an object yields its
+   * field types here, where the single binding form yields its keys.
+   */
+  private valueTypeOf(iterable: Type, element: Type): Type {
+    if (!isAny(iterable) && iterable.kind === "object") {
+      const fields = [...iterable.fields.values()].map((field) => field.type);
+      // an object with no known fields tells us nothing about its values
+      return fields.length ? unionOf(fields) : ANY;
+    }
+    return element;
+  }
+
+  /** the type of the first binding in `for k, v in ...`. */
+  private keyTypeOf(iterable: Type): Type {
+    if (isAny(iterable)) return ANY;
+    // an array or string is walked by numeric index, an object by string key
+    if (iterable.kind === "array") return NUMBER;
+    if (iterable.kind === "primitive" && iterable.name === "string") {
+      return NUMBER;
+    }
+    if (iterable.kind === "object") return STRING;
+    return ANY;
   }
 
   /** the type of one element when iterating a value. */

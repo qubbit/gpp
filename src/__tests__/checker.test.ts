@@ -336,6 +336,25 @@ describe("control flow", () => {
     clean('for c in "abc" {\n let s: string = c\n}');
   });
 
+  test("the second binding is an index for arrays, a key for objects", () => {
+    clean("for i, v in [1, 2] {\n let n: number = i\n}");
+    clean('for k, v in {a: 1} {\n let s: string = k\n}');
+    rejects(
+      "for i, v in [1, 2] {\n let s: string = i\n}",
+      /Cannot assign number to string/,
+    );
+  });
+
+  // the one binding form yields an object's keys, so the pair form must yield
+  // its values instead rather than reusing that type
+  test("the value binding takes an object's field types", () => {
+    clean('for k, v in {a: 1, b: 2} {\n let n: number = v\n}');
+    rejects(
+      'for k, v in {a: 1} {\n let s: string = v\n}',
+      /Cannot assign number to string/,
+    );
+  });
+
   test("iterating a non collection is rejected", () => {
     rejects("let n: number = 1\nfor x in n {\n println(x)\n}", /Cannot iterate over number/);
   });
