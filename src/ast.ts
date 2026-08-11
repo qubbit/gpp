@@ -104,6 +104,7 @@ export interface ObjectPatternField extends Position {
 export type Expression =
   | NumberLiteral
   | StringLiteral
+  | InterpolatedString
   | BooleanLiteral
   | NilLiteral
   | Identifier
@@ -127,6 +128,16 @@ export interface NumberLiteral extends Position {
 export interface StringLiteral extends Position {
   kind: "string_literal";
   value: string;
+}
+
+/**
+ * `"a {b} c"`. literals and expressions alternate, starting and ending with a
+ * literal, so `literals.length === expressions.length + 1`.
+ */
+export interface InterpolatedString extends Position {
+  kind: "interpolated_string";
+  literals: string[];
+  expressions: Expression[];
 }
 
 export interface BooleanLiteral extends Position {

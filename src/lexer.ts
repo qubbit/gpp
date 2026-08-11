@@ -3,6 +3,9 @@ export enum TokenType {
   BinaryOperator = "binary_op", // one of +, -, *, /, %, and the comparison/logical ops
   Number = "number",
   String = "string",
+  // a string with `{...}` holes. `value` is an InterpolationParts describing
+  // the literal chunks and the raw source of each hole.
+  InterpolatedString = "interpolated_string",
   Assignment = "=",
   // compound assignment (+=, -=, *=, /=); the operator is kept in `value`.
   CompoundAssignment = "compound_assign",
@@ -85,6 +88,29 @@ export interface Token {
   value: any;
   line: number;
   column: number;
+}
+
+/**
+ * a hole in an interpolated string. the lexer captures the raw source rather
+ * than tokens, and the parser lexes it in turn: that keeps the token stream
+ * flat, so every consumer that walks tokens stays unaware of interpolation.
+ */
+export interface InterpolationHole {
+  source: string;
+  // position of the hole's first character, so errors inside it point at the
+  // real place in the outer file rather than at the string
+  line: number;
+  column: number;
+}
+
+/**
+ * `"a {b} c"` becomes literals ["a ", " c"] and one hole. there is always
+ * exactly one more literal than hole, so the two zip together as
+ * literal, hole, literal, hole, ..., literal.
+ */
+export interface InterpolationParts {
+  literals: string[];
+  holes: InterpolationHole[];
 }
 
 export class LexError extends Error {
@@ -262,7 +288,12 @@ export class Lexer {
   private scanString(): void {
     this.advance(); // opening quote
 
+    // literal chunks and the holes between them. a string with no holes stays
+    // a plain String token, so nothing downstream changes for ordinary strings.
+    const literals: string[] = [];
+    const holes: InterpolationHole[] = [];
     let value = "";
+
     while (!this.isAtEnd() && this.peek() !== '"') {
       if (this.peek() === "\\") {
         this.advance();
@@ -270,13 +301,111 @@ export class Lexer {
         value += unescape(this.advance());
         continue;
       }
+
+      // `{{` and `}}` are the escapes for a literal brace
+      if (this.peek() === "{" && this.peek(1) === "{") {
+        this.advance();
+        this.advance();
+        value += "{";
+        continue;
+      }
+      if (this.peek() === "}" && this.peek(1) === "}") {
+        this.advance();
+        this.advance();
+        value += "}";
+        continue;
+      }
+
+      if (this.peek() === "{") {
+        literals.push(value);
+        value = "";
+        holes.push(this.scanHole());
+        continue;
+      }
+
       value += this.advance();
     }
 
     if (this.isAtEnd()) throw this.error("Unterminated string");
 
     this.advance(); // closing quote
-    this.addToken(TokenType.String, value);
+
+    if (holes.length === 0) {
+      this.addToken(TokenType.String, value);
+      return;
+    }
+
+    // one more literal than hole, so the two alternate cleanly
+    literals.push(value);
+    this.addToken(TokenType.InterpolatedString, { literals, holes });
+  }
+
+  /**
+   * reads a `{...}` hole, returning its raw source for the parser to lex.
+   *
+   * finding the closing brace means tracking nesting, because a hole may hold
+   * an object literal, a call, an index, or another string that itself
+   * contains braces. scanning naively to the first `}` breaks on all of those.
+   */
+  private scanHole(): InterpolationHole {
+    const openedAt = { line: this.line, column: this.cursor - this.lineStart + 1 };
+    this.advance(); // the opening brace
+
+    const start = this.cursor;
+    const from = { line: this.line, column: this.cursor - this.lineStart + 1 };
+    let depth = 1;
+
+    while (!this.isAtEnd()) {
+      const c = this.peek();
+
+      // a nested string is skipped wholesale: its braces and quotes are data,
+      // not structure
+      if (c === '"') {
+        this.skipNestedString();
+        continue;
+      }
+
+      if (c === "{" || c === "[" || c === "(") depth++;
+      if (c === "}" || c === "]" || c === ")") {
+        depth--;
+        if (depth === 0) break;
+      }
+
+      this.advance();
+    }
+
+    if (this.isAtEnd()) {
+      throw new LexError(
+        "Unterminated interpolation, expected '}'",
+        openedAt.line,
+        openedAt.column,
+      );
+    }
+
+    const source = this.source.slice(start, this.cursor);
+    this.advance(); // the closing brace
+
+    if (!source.trim()) {
+      throw new LexError(
+        "Empty interpolation, expected an expression between the braces",
+        openedAt.line,
+        openedAt.column,
+      );
+    }
+
+    return { source, line: from.line, column: from.column };
+  }
+
+  /** consumes a complete string literal, escapes included, without decoding it. */
+  private skipNestedString(): void {
+    this.advance(); // opening quote
+    while (!this.isAtEnd() && this.peek() !== '"') {
+      // an escaped quote does not close the string
+      if (this.peek() === "\\") this.advance();
+      if (this.isAtEnd()) break;
+      this.advance();
+    }
+    if (!this.isAtEnd()) this.advance(); // closing quote
   }
 
   private scanIdentifier(): void {

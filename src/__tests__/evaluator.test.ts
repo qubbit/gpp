@@ -109,6 +109,66 @@ describe("literals and operators", () => {
   });
 });
 
+describe("string interpolation", () => {
+  test("a hole is replaced by its value", () => {
+    assert.equal(prints('let name = "gpp"\nprint("hello {name}")'), "hello gpp");
+  });
+
+  test("a hole may hold any expression", () => {
+    assert.equal(prints('let a = 2\nlet b = 3\nprint("{a} + {b} = {a + b}")'), "2 + 3 = 5");
+    assert.equal(prints('print("len is {len([1, 2, 3])}")'), "len is 3");
+    assert.equal(prints('let xs = [10, 20]\nprint("first {xs[0]}")'), "first 10");
+  });
+
+  // the case python could not lex until 3.12
+  test("a hole may contain a string with its own quotes", () => {
+    assert.equal(
+      prints('let o = {name: "ada"}\nprint("who: {o["name"]}")'),
+      "who: ada",
+    );
+  });
+
+  // a leading brace in a hole is an object literal, not a block
+  test("a hole may contain braces", () => {
+    assert.equal(prints('let k = "a"\nprint("v = { {a: 1}[k] }")'), "v = 1");
+  });
+
+  test("interpolations nest", () => {
+    assert.equal(prints('let x = 1\nprint("outer {"inner {x}"}")'), "outer inner 1");
+  });
+
+  test("values are rendered the way print renders them", () => {
+    assert.equal(
+      prints('print("n={1} b={true} nil={nil} arr={[1, 2]}")'),
+      "n=1 b=true nil=nil arr=[1, 2]",
+    );
+  });
+
+  test("a doubled brace is a literal brace", () => {
+    assert.equal(prints('print("{{not a hole}}")'), "{not a hole}");
+  });
+
+  test("a string with no holes is unchanged", () => {
+    assert.equal(prints('print("plain")'), "plain");
+  });
+
+  test("an empty hole is rejected", () => {
+    assert.match(errorOf('print("{}")') ?? "", /Empty interpolation/);
+  });
+
+  test("an unterminated hole is rejected", () => {
+    assert.match(errorOf('print("{oops")') ?? "", /Unterminated interpolation/);
+  });
+
+  test("a statement in a hole is rejected", () => {
+    assert.match(errorOf('print("{let x = 1}")') ?? "", /Unexpected token 'let'/);
+  });
+
+  test("an error inside a hole is still reported", () => {
+    assert.match(errorOf('print("{nope}")') ?? "", /Undefined variable 'nope'/);
+  });
+});
+
 describe("variables and scope", () => {
   test("declaration and use", () => {
     assert.equal(prints("let x = 10\nlet y = x + 20\nprint(y)"), "30");

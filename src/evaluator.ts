@@ -483,6 +483,17 @@ export class Evaluator {
       case "nil_literal":
         return null;
 
+      case "interpolated_string": {
+        // literals and expressions alternate, so walk them together. each hole
+        // is rendered with the same stringify print uses.
+        let out = expression.literals[0] ?? "";
+        expression.expressions.forEach((hole, index) => {
+          out += stringify(this.evaluate(hole, env));
+          out += expression.literals[index + 1] ?? "";
+        });
+        return out;
+      }
+
       case "identifier":
         return this.lookup(
           expression.name,
