@@ -22,6 +22,7 @@ import type {
   Parameter,
   Pattern,
   Program,
+  ReturnStatement,
   Statement,
   TypeField,
   TypeNode,
@@ -722,11 +723,47 @@ export class Parser {
     }
   }
 
+  /**
+   * `(a) -> a*a` and friends. desugars to the tree `fn(a) { return a*a }`
+   * produces, so the evaluator and checker need no lambda-specific handling.
+   */
   private parseLambda(): Expression {
+    // read the `(` before parseParameters consumes it; it is where the lambda
+    // visually starts, which is the position errors should point at
     const token = this.peek();
     const params = this.parseParameters();
+
     this.expect(TokenType.Arrow, "after lambda parameters");
-    throw this.error("lambda bodies not implemented yet");
+
+    // plain parseExpression, so the body inherits the surrounding noBrace and
+    // singleLine context rather than resetting it
+    const value = this.parseExpression();
+
+    // the return and the block are synthetic: nothing in `(a) -> a*a` was
+    // written by the user, so they carry the body's position instead
+    const returnStatement: ReturnStatement = {
+      kind: "return_statement",
+      value,
+      line: value.line,
+      column: value.column,
+    };
+
+    const body: BlockStatement = {
+      kind: "block_statement",
+      body: [returnStatement],
+      line: value.line,
+      column: value.column,
+    };
+
+    return {
+      kind: "function_expression",
+      name: null,
+      params,
+      returnType: null,
+      body,
+      line: token.line,
+      column: token.column,
+    };
   }
 
   private parsePrimary(): Expression {
