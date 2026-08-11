@@ -638,6 +638,10 @@ println(area(Circle(2)))
 println(area(Rect(3, 4)))
 println(area(Empty()))
 
+// a variant carries its name, so a bare object is not one even when the
+// fields line up. that is what lets match tell the cases apart.
+// let bad: Result = {value: 5}   // uncomment: use Ok(5) instead
+
 // dropping an arm is reported: open the Types tab after uncommenting
 // fn partial(s: Shape) {
 //   match s {
