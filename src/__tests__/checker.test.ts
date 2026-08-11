@@ -443,7 +443,7 @@ describe("modules and the prelude", () => {
   });
 
   test("importing from the prelude is a legal no-op", () => {
-    clean("from prelude import map, reduce, type\nprintln(type(1))");
+    clean("from prelude import map, reduce, type_of\nprintln(type_of(1))");
   });
 
   test("an unknown prelude name is reported", () => {
@@ -503,6 +503,59 @@ describe("lambdas", () => {
   });
 });
 
+describe("tagged variants", () => {
+  const RESULT = 'type Result =\n | Ok {value: any}\n | Err {message: string}\n';
+
+  test("a constructor takes its fields positionally", () => {
+    clean(RESULT + "let r = Ok(5)");
+    rejects(RESULT + "let r = Ok(1, 2)", /Expected 1 argument\(s\)/);
+    rejects('type T =\n | V {n: number}\nlet v = V("s")', /Cannot pass string as argument 1/);
+  });
+
+  // matching a variant is what tells the arm which one it holds
+  test("a matched variant narrows its fields", () => {
+    clean(RESULT + 'fn f(r: Result) {\n match r {\n  Err {message} -> upper(message)\n  _ -> ""\n }\n}');
+    // the field really is a string, so a numeric use is caught
+    rejects(
+      RESULT + 'fn f(r: Result) {\n match r {\n  Err {message} -> message * 2\n  _ -> 0\n }\n}',
+      /Cannot apply/,
+    );
+  });
+
+  test("every variant must be covered", () => {
+    clean(RESULT + "fn f(r: Result) {\n match r {\n  Ok {value} -> value\n  Err {message} -> message\n }\n}");
+    rejects(
+      RESULT + "fn f(r: Result) {\n match r {\n  Ok {value} -> value\n }\n}",
+      /does not cover Err/,
+    );
+  });
+
+  test("a catch-all covers the rest", () => {
+    clean(RESULT + 'fn f(r: Result) {\n match r {\n  Ok {value} -> value\n  _ -> "other"\n }\n}');
+  });
+
+  test("an unknown variant or field is reported", () => {
+    rejects(RESULT + "fn f(r: Result) {\n match r {\n  Nope {x} -> x\n }\n}", /Unknown variant 'Nope'/);
+    rejects(
+      RESULT + "fn f(r: Result) {\n match r {\n  Ok {nope} -> nope\n  Err {message} -> message\n }\n}",
+      /Variant 'Ok' has no field 'nope'/,
+    );
+  });
+
+  // two variants with identical fields are still distinct
+  test("variants are nominal among themselves", () => {
+    rejects(
+      "type T =\n | A {x: number}\n | B {x: number}\nfn f(v: A) {\n return v\n}\nf(B(1))",
+      /Cannot pass/,
+    );
+  });
+
+  test("a duplicate type or variant is reported", () => {
+    rejects("type T =\n | A {x: number}\ntype T =\n | B {y: number}", /already declared/);
+    rejects("type T =\n | A {x: number}\n | A {y: number}", /declared twice/);
+  });
+});
+
 describe("narrowing", () => {
   test("a nil test refines the branch", () => {
     clean("fn f(x: number | nil) {\n if x != nil {\n  let n: number = x\n }\n}");
@@ -510,8 +563,8 @@ describe("narrowing", () => {
   });
 
   test("a type test refines the branch", () => {
-    clean('fn f(x: number | string) {\n if type(x) == "number" {\n  let n: number = x\n }\n}');
-    clean('fn f(x: number | string) {\n if type(x) != "number" {\n  let s: string = x\n }\n}');
+    clean('fn f(x: number | string) {\n if type_of(x) == "number" {\n  let n: number = x\n }\n}');
+    clean('fn f(x: number | string) {\n if type_of(x) != "number" {\n  let s: string = x\n }\n}');
   });
 
   // the early exit idiom: reaching the next line means the guard was false
@@ -526,7 +579,7 @@ describe("narrowing", () => {
       'fn f(x: number | nil): string {\n if x == nil {\n  return "none"\n }\n return "got {x * 2}"\n}',
     );
     clean(
-      'fn f(v: number | string): string {\n if type(v) == "number" {\n  return "n"\n }\n return upper(v)\n}',
+      'fn f(v: number | string): string {\n if type_of(v) == "number" {\n  return "n"\n }\n return upper(v)\n}',
     );
   });
 

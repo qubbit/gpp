@@ -187,7 +187,7 @@ println(totals)
     description: "The math module and the auto-imported prelude",
     source: `// the prelude is always imported, so print and friends just work.
 // spelling it out is still allowed and does nothing.
-from prelude import map, reduce, type
+from prelude import map, reduce, type_of
 
 // other modules need a real import
 from math import pi, sqrt, pow
@@ -205,7 +205,7 @@ println("3,4 triangle:", hypotenuse(3, 4))
 // type reports the runtime type of any value
 let samples = [1, "two", true, [4], {five: 5}]
 for value in samples {
-  println(type(value), "->", value)
+  println(type_of(value), "->", value)
 }
 `,
   },

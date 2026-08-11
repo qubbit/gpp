@@ -22,6 +22,7 @@ const KEYWORDS = [
   "import",
   "export",
   "interface",
+  "type",
   "match",
 ];
 
@@ -30,7 +31,7 @@ const TYPE_KEYWORDS = ["number", "string", "bool", "any", "void"];
 
 // the prelude is always in scope, so highlighting it helps discoverability
 const BUILTINS = [
-  "println", "print", "type", "len", "push", "pop", "slice", "concat", "reverse",
+  "println", "print", "type_of", "len", "push", "pop", "slice", "concat", "reverse",
   "contains", "range", "map", "filter", "reduce", "keys", "values",
   "upper", "lower", "trim", "split", "join", "str", "num",
   "abs", "min", "max", "floor", "ceil", "round", "sqrt",

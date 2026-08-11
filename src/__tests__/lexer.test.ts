@@ -9,7 +9,7 @@ function lex(source: string): Token[] {
   return new Lexer().lex(source).slice(0, -1);
 }
 
-/** renders each token as `type(lexeme)` so assertions read like the source. */
+/** renders each token as `type_of(lexeme)` so assertions read like the source. */
 function shapes(source: string): string[] {
   return lex(source).map((t) => `${t.type}(${t.lexeme})`);
 }

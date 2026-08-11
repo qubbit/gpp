@@ -64,7 +64,7 @@ describe("literals and operators", () => {
 
   test("nil is a literal", () => {
     assert.equal(prints("println(nil)"), "nil");
-    assert.equal(prints("println(type(nil))"), "nil");
+    assert.equal(prints("println(type_of(nil))"), "nil");
   });
 
   test("a missing key compares equal to nil", () => {
@@ -106,6 +106,63 @@ describe("literals and operators", () => {
     // calling undefined would throw if the right side were evaluated
     assert.equal(prints("println(false && nope)"), "false");
     assert.equal(prints("println(true || nope)"), "true");
+  });
+});
+
+describe("tagged variants", () => {
+  const RESULT = 'type Result =\n | Ok {value: any}\n | Err {message: string}\n';
+
+  test("a variant constructs and matches", () => {
+    assert.equal(
+      prints(RESULT + 'println(match Ok(5) {\n Ok {value} -> "got {value}"\n Err {message} -> message\n})'),
+      "got 5",
+    );
+    assert.equal(
+      prints(RESULT + 'println(match Err("boom") {\n Ok {value} -> value\n Err {message} -> "failed: {message}"\n})'),
+      "failed: boom",
+    );
+  });
+
+  test("a variant may carry several fields or none", () => {
+    assert.equal(
+      prints("type S =\n | Rect {w: number, h: number}\nprintln(match Rect(3, 4) {\n Rect {w, h} -> w * h\n})"),
+      "12",
+    );
+    assert.equal(
+      prints('type O =\n | None\n | Some {value: any}\nprintln(match None() {\n None {} -> "nothing"\n Some {value} -> value\n})'),
+      "nothing",
+    );
+  });
+
+  test("a variant field can hold a nested pattern", () => {
+    assert.equal(
+      prints(RESULT + "println(match Ok([1, 2]) {\n Ok {value: [a, b]} -> a + b\n _ -> 0\n})"),
+      "3",
+    );
+  });
+
+  // a variant prints as the call that built it, not as the object underneath
+  test("a variant prints as its constructor", () => {
+    assert.equal(prints(RESULT + "println(Ok(5))"), "Ok(5)");
+    assert.equal(prints("type O =\n | None\nprintln(None())"), "None()");
+  });
+
+  test("type_of reports the variant name", () => {
+    assert.equal(prints(RESULT + "println(type_of(Ok(1)))"), "Ok");
+  });
+
+  test("a different variant does not match", () => {
+    assert.equal(
+      prints(RESULT + 'println(match Ok(1) {\n Err {message} -> "e"\n _ -> "fell through"\n})'),
+      "fell through",
+    );
+  });
+
+  test("the leading bar is optional", () => {
+    assert.equal(
+      prints("type T = A {x: number} | B {y: number}\nprintln(match A(1) {\n A {x} -> x\n B {y} -> y\n})"),
+      "1",
+    );
   });
 });
 
@@ -850,7 +907,7 @@ describe("prelude", () => {
 
   test("type reports the runtime type", () => {
     assert.deepEqual(
-      output('println(type(1))\nprintln(type("s"))\nprintln(type(true))\nprintln(type([]))\nprintln(type({}))\nprintln(type(print))'),
+      output('println(type_of(1))\nprintln(type_of("s"))\nprintln(type_of(true))\nprintln(type_of([]))\nprintln(type_of({}))\nprintln(type_of(print))'),
       ["number", "string", "bool", "array", "object", "function"],
     );
   });
@@ -906,7 +963,7 @@ describe("modules", () => {
   // the prelude is auto imported, so spelling the import out changes nothing
   test("importing from the prelude is a legal no-op", () => {
     assert.equal(
-      prints("from prelude import map, reduce, type\nprintln(type(1))"),
+      prints("from prelude import map, reduce, type_of\nprintln(type_of(1))"),
       "number",
     );
   });

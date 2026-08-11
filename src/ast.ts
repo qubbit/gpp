@@ -60,7 +60,8 @@ export type Pattern =
   | LiteralPattern
   | BindingPattern
   | ArrayPattern
-  | ObjectPattern;
+  | ObjectPattern
+  | VariantPattern;
 
 // `_` matches anything and binds nothing.
 export interface WildcardPattern extends Position {
@@ -89,6 +90,13 @@ export interface ObjectPattern extends Position {
   kind: "object_pattern";
   fields: ObjectPatternField[];
   rest: string | null;
+}
+
+/** `Ok {value}` — matches a variant by name and destructures its fields. */
+export interface VariantPattern extends Position {
+  kind: "variant_pattern";
+  name: string;
+  fields: ObjectPatternField[];
 }
 
 export interface ObjectPatternField extends Position {
@@ -267,6 +275,7 @@ export type Statement =
   | BreakStatement
   | ContinueStatement
   | InterfaceDeclaration
+  | TypeDeclaration
   | ImportStatement
   | ExportStatement;
 
@@ -344,6 +353,24 @@ export interface BreakStatement extends Position {
 
 export interface ContinueStatement extends Position {
   kind: "continue_statement";
+}
+
+/**
+ * `type Shape = | Circle {radius: number} | Rect {w: number, h: number}`
+ *
+ * a tagged union. each variant declares its own fields and becomes a
+ * constructor function, so `Circle(2)` builds one and `Circle {radius}`
+ * matches it.
+ */
+export interface TypeDeclaration extends Position {
+  kind: "type_declaration";
+  name: string;
+  variants: VariantDeclaration[];
+}
+
+export interface VariantDeclaration extends Position {
+  name: string;
+  fields: TypeField[];
 }
 
 export interface InterfaceDeclaration extends Position {

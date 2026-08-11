@@ -113,7 +113,7 @@ println("nil    ->", describe(nil))`,
 scores["ada"] = 0
 
 println("missing key:", scores["nobody"])
-println("type:", type(nil))
+println("type:", type_of(nil))
 
 // truthiness cannot tell 0 apart from absent
 println("truthy test says:", !(scores["ada"]))
@@ -591,6 +591,61 @@ println(strict(21))
 // strict("nope")       // uncomment: cannot pass string as argument 1`,
       },
       {
+        title: "Tagged variants",
+        note:
+          "A type declaration defines a set of variants. Each becomes a constructor taking its fields in order, and matching one narrows its fields inside that arm.",
+        source: `type Result =
+  | Ok {value: any}
+  | Err {message: string}
+
+fn divide(a, b): Result {
+  if b == 0 {
+    return Err("cannot divide by zero")
+  }
+  Ok(a / b)
+}
+
+fn render(r: Result): string {
+  return match r {
+    Ok {value}    -> "got {value}"
+    // message is known to be a string here, so upper() is fine
+    Err {message} -> "failed: {upper(message)}"
+  }
+}
+
+println(render(divide(10, 2)))
+println(render(divide(1, 0)))
+
+// a variant prints as the call that built it
+println(Ok(5), Err("nope"))
+println(type_of(Ok(5)))
+
+// variants can carry several fields, or none at all
+type Shape =
+  | Circle {radius: number}
+  | Rect {w: number, h: number}
+  | Empty
+
+fn area(s: Shape): number {
+  return match s {
+    Circle {radius} -> 3.14159 * radius * radius
+    Rect {w, h}     -> w * h
+    Empty {}        -> 0
+  }
+}
+
+println(area(Circle(2)))
+println(area(Rect(3, 4)))
+println(area(Empty()))
+
+// dropping an arm is reported: open the Types tab after uncommenting
+// fn partial(s: Shape) {
+//   match s {
+//     Circle {radius} -> radius
+//   }
+// }`,
+      },
+      {
         title: "Narrowing",
         note:
           "Testing a value refines its type inside the branch, so a union becomes usable without a cast. The refinement belongs to that branch only.",
@@ -616,9 +671,9 @@ fn double_or_zero(x: number | nil): number {
 
 println(double_or_zero(5), double_or_zero(nil))
 
-// testing with type() works the same way
+// testing with type_of() works the same way
 fn render(v: number | string): string {
-  if type(v) == "number" {
+  if type_of(v) == "number" {
     return "number: {v + 0}"
   }
   return "string: {upper(v)}"
@@ -700,9 +755,9 @@ println(magnitude({x: 6, y: 8, label: "far", extra: true}))
         title: "The prelude",
         note:
           "println, len, type, the array helpers and the maths functions need no import. Writing the import out is legal and does nothing.",
-        source: `from prelude import map, reduce, type
+        source: `from prelude import map, reduce, type_of
 
-println(type(1), type("s"), type(true), type([]), type({}), type(nil))
+println(type_of(1), type_of("s"), type_of(true), type_of([]), type_of({}), type_of(nil))
 println(len("hello"), len([1, 2]), len({a: 1}))
 println(upper("shout"), lower("WHISPER"), trim("  tidy  "))
 println(split("a,b,c", ","))
