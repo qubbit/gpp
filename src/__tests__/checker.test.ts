@@ -550,6 +550,35 @@ describe("tagged variants", () => {
     );
   });
 
+  // a bare object of the right shape is still not a variant, and the plain
+  // "cannot assign" message does not say how to fix that
+  test("assigning an object literal suggests the constructor", () => {
+    rejects(
+      'type A = X {s: string} | Y {a: bool}\nlet a: A = {s: "hi"}',
+      /A variant is built by its constructor, so write X\(s\) or Y\(a\)/,
+    );
+    rejects(
+      'type A = X {s: string}\nfn f(v: A) {\n return 1\n}\nf({s: "hi"})',
+      /A variant is built by its constructor/,
+    );
+  });
+
+  test("the hint does not fire for ordinary shape mismatches", () => {
+    const errors = errorsIn("interface P {\n x: number\n}\nlet p: P = {y: 1}");
+    assert.ok(errors.length > 0);
+    assert.ok(
+      !errors.some((message) => message.includes("built by its constructor")),
+      `unexpected variant hint: ${errors.join(" | ")}`,
+    );
+  });
+
+  // interface unions stay structural, so a literal satisfies them
+  test("an interface union still accepts a plain object", () => {
+    clean(
+      'interface P {\n s: string\n}\ninterface Q {\n a: bool\n}\nlet v: P | Q = {s: "hi"}',
+    );
+  });
+
   test("a duplicate type or variant is reported", () => {
     rejects("type T =\n | A {x: number}\ntype T =\n | B {y: number}", /already declared/);
     rejects("type T =\n | A {x: number}\n | A {y: number}", /declared twice/);

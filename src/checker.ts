@@ -417,6 +417,41 @@ export class Checker {
     return scope;
   }
 
+  /**
+   * an assignment failure, with a hint when the target wants a variant and the
+   * value is a bare object. a variant carries its constructor's name, so a
+   * literal of the right shape is still not one, and the plain "cannot assign"
+   * message does not say how to fix that.
+   */
+  private reportAssignment(
+    actual: Type,
+    target: Type,
+    node: { line: number; column: number },
+  ): void {
+    const base = `Cannot assign ${displayType(actual)} to ${displayType(target)}`;
+    const hint = this.variantHint(actual, target);
+    this.report(hint ? `${base}. ${hint}` : base, node);
+  }
+
+  /** how to build the variant the target wanted, when that is the mismatch. */
+  private variantHint(actual: Type, target: Type): string | null {
+    // only fires when a bare object was given where a variant was wanted
+    if (actual.kind !== "object" || actual.variant !== undefined) return null;
+
+    const wanted = (target.kind === "union" ? target.options : [target]).filter(
+      (option) => option.kind === "object" && option.variant !== undefined,
+    ) as ObjectTypeInfo[];
+
+    if (wanted.length === 0) return null;
+
+    const calls = wanted.map((option) => {
+      const fields = [...option.fields.keys()].join(", ");
+      return `${option.variant}(${fields})`;
+    });
+
+    return `A variant is built by its constructor, so write ${calls.join(" or ")} rather than an object literal.`;
+  }
+
   private report(message: string, node: { line: number; column: number }): void {
     this.errors.push({ message, line: node.line, column: node.column });
   }
@@ -590,10 +625,7 @@ export class Checker {
         const actual = this.checkExpression(statement.value, scope, annotated);
 
         if (annotated && !isAssignable(actual, annotated)) {
-          this.report(
-            `Cannot assign ${displayType(actual)} to ${displayType(annotated)}`,
-            statement.value,
-          );
+          this.reportAssignment(actual, annotated, statement.value);
         }
 
         // the annotation wins when present, so later use checks against what
@@ -685,10 +717,7 @@ export class Checker {
 
         if (statement.operator === "=") {
           if (!isAssignable(value, target)) {
-            this.report(
-              `Cannot assign ${displayType(value)} to ${displayType(target)}`,
-              statement.value,
-            );
+            this.reportAssignment(value, target, statement.value);
           }
           return;
         }
@@ -1355,7 +1384,9 @@ export class Checker {
       }
     }
 
-    return `Cannot pass ${displayType(actual)} as ${position} of type ${displayType(expected)}`;
+    const base = `Cannot pass ${displayType(actual)} as ${position} of type ${displayType(expected)}`;
+    const hint = this.variantHint(actual, expected);
+    return hint ? `${base}. ${hint}` : base;
   }
 
   private propertyType(
