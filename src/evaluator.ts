@@ -52,9 +52,17 @@ export interface RunResult {
 export interface RunOptions {
   // guards against a runaway loop locking up the browser tab
   maxSteps?: number;
+  // guards against unbounded recursion overflowing the host stack
+  maxDepth?: number;
 }
 
 const DEFAULT_MAX_STEPS = 5_000_000;
+
+// the evaluator recurses on the host stack, so gpp recursion is bounded by
+// javascript's. measured headroom is around 1100 frames before the host throws
+// RangeError, which would escape past run()'s handling entirely, so this sits
+// well below that while leaving room for genuinely deep recursion.
+const DEFAULT_MAX_DEPTH = 500;
 
 // modules implemented in gpp. `exports` maps the imported name to the name the
 // source declares, so `map` can be exported without shadowing the prelude's
@@ -82,6 +90,8 @@ export class Evaluator {
   private modules = createModules();
   private steps = 0;
   private maxSteps = DEFAULT_MAX_STEPS;
+  private depth = 0;
+  private maxDepth = DEFAULT_MAX_DEPTH;
   private exported: string[] = [];
   // text written by `print` that has no newline yet. `println` flushes it, and
   // so does the end of the run, so a trailing `print` is never swallowed.
@@ -111,6 +121,8 @@ export class Evaluator {
     this.pending = "";
     this.steps = 0;
     this.maxSteps = options.maxSteps ?? DEFAULT_MAX_STEPS;
+    this.depth = 0;
+    this.maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH;
     this.exported = [];
 
     try {
@@ -759,6 +771,15 @@ export class Evaluator {
       scope.define(param.name, args[index]!);
     });
 
+    if (++this.depth > this.maxDepth) {
+      this.depth--;
+      throw new RuntimeError(
+        `Call depth exceeded ${this.maxDepth}, the recursion may not terminate`,
+        line,
+        column,
+      );
+    }
+
     try {
       // a body that falls off the end yields its last statement's value; an
       // explicit `return` unwinds first and still wins
@@ -766,6 +787,8 @@ export class Evaluator {
     } catch (signal) {
       if (signal instanceof ReturnSignal) return signal.value;
       throw signal;
+    } finally {
+      this.depth--;
     }
   }
 

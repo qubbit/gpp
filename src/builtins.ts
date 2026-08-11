@@ -287,9 +287,17 @@ export function createPrelude(
       return text.codePointAt(0)!;
     }),
 
-    chr: native("chr", 1, ([code]) =>
-      String.fromCodePoint(expectNumber(code as Value, "chr", "first")),
-    ),
+    chr: native("chr", 1, ([code]) => {
+      const point = expectNumber(code as Value, "chr", "first");
+      // fromCodePoint throws a host RangeError outside this range, which would
+      // escape the interpreter instead of surfacing as a gpp error
+      if (!Number.isInteger(point) || point < 0 || point > 0x10ffff) {
+        throw new RuntimeError(
+          `chr expects a code point between 0 and 1114111, received ${point}`,
+        );
+      }
+      return String.fromCodePoint(point);
+    }),
 
     str: native("str", 1, ([value]) => stringify(value as Value)),
     num: native("num", 1, ([value]) => {

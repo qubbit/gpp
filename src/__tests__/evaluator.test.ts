@@ -289,6 +289,12 @@ describe("string helpers", () => {
     assert.equal(prints('println(pad_end("7", 3, "."))'), "7..");
   });
 
+  test("chr rejects a code point outside the unicode range", () => {
+    // fromCodePoint would throw a host RangeError that escapes the interpreter
+    assert.match(errorOf("println(chr(-1))") ?? "", /between 0 and 1114111/);
+    assert.match(errorOf("println(chr(99999999))") ?? "", /between 0 and 1114111/);
+  });
+
   test("chars, ord and chr", () => {
     assert.equal(prints('println(chars("hi"))'), '["h", "i"]');
     assert.equal(prints('println(ord("a"))'), "97");
@@ -428,6 +434,22 @@ describe("control flow", () => {
     assert.deepEqual(
       output("for x in [1,2,3,4] {\n if x == 3 {\n  break\n }\n println(x)\n}"),
       ["1", "2"],
+    );
+  });
+
+  // the evaluator recurses on the host stack, so unbounded gpp recursion would
+  // otherwise overflow it and escape as a raw RangeError
+  test("unbounded recursion is stopped by the depth limit", () => {
+    assert.match(
+      errorOf("fn f(n) {\n return f(n + 1)\n}\nf(0)") ?? "",
+      /Call depth exceeded/,
+    );
+  });
+
+  test("ordinary recursion still fits within the limit", () => {
+    assert.equal(
+      prints("fn fib(n) {\n if n < 2 {\n  return n\n }\n return fib(n - 1) + fib(n - 2)\n}\nprintln(fib(20))"),
+      "6765",
     );
   });
 
