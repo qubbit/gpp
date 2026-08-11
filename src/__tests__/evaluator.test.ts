@@ -109,6 +109,54 @@ describe("literals and operators", () => {
   });
 });
 
+describe("for with two bindings", () => {
+  test("an array yields index and value", () => {
+    assert.deepEqual(
+      output('for i, v in ["a", "b"] {\n println("{i}: {v}")\n}'),
+      ["0: a", "1: b"],
+    );
+  });
+
+  test("a string yields index and character", () => {
+    assert.deepEqual(
+      output('for i, c in "hi" {\n println("{i}={c}")\n}'),
+      ["0=h", "1=i"],
+    );
+  });
+
+  // the python-shaped case: an object walks key and value together
+  test("an object yields key and value", () => {
+    assert.deepEqual(
+      output('for k, v in {a: 1, b: 2} {\n println("{k} -> {v}")\n}'),
+      ["a -> 1", "b -> 2"],
+    );
+  });
+
+  test("the single binding form is unchanged", () => {
+    assert.deepEqual(output("for v in [1, 2] {\n println(v)\n}"), ["1", "2"]);
+    // one binding over an object still walks its keys
+    assert.deepEqual(output("for k in {a: 1, b: 2} {\n println(k)\n}"), ["a", "b"]);
+  });
+
+  test("break and continue still work", () => {
+    assert.deepEqual(
+      output("for i, v in [1, 2, 3, 4] {\n if i == 1 {\n  continue\n }\n if i == 3 {\n  break\n }\n println(i, v)\n}"),
+      ["0 1", "2 3"],
+    );
+  });
+
+  test("each turn still gets its own bindings", () => {
+    assert.deepEqual(
+      output('let fs = []\nfor i, v in ["a", "b"] {\n fs = push(fs, () -> "{i}{v}")\n}\nfor f in fs {\n println(f())\n}'),
+      ["0a", "1b"],
+    );
+  });
+
+  test("iterating a non collection is still an error", () => {
+    assert.match(errorOf("for k, v in 5 {\n println(k)\n}") ?? "", /Cannot iterate over number/);
+  });
+});
+
 describe("output", () => {
   test("println ends the line", () => {
     assert.deepEqual(output('println("a")\nprintln("b")'), ["a", "b"]);

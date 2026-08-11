@@ -316,6 +316,9 @@ export interface WhileStatement extends Position {
 export interface ForStatement extends Position {
   kind: "for_statement";
   binding: string;
+  // `for i, v in xs` binds a second name: the index for an array or string,
+  // the key for an object. null for the single-binding form.
+  valueBinding: string | null;
   iterable: Expression;
   body: BlockStatement;
 }

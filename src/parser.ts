@@ -401,6 +401,12 @@ export class Parser {
   private parseFor(): Statement {
     const token = this.expect(TokenType.For, "to start a for loop");
     const binding = this.expect(TokenType.Identifier, "as the loop variable");
+
+    // `for i, v in xs` binds the index or key alongside the value
+    const valueBinding = this.match(TokenType.Comma)
+      ? this.expect(TokenType.Identifier, "as the second loop variable")
+      : null;
+
     const inKeyword = this.expect(
       TokenType.Identifier,
       "after the loop variable",
@@ -413,6 +419,7 @@ export class Parser {
     return {
       kind: "for_statement",
       binding: binding.lexeme,
+      valueBinding: valueBinding?.lexeme ?? null,
       iterable,
       body,
       line: token.line,

@@ -212,13 +212,23 @@ export class Evaluator {
 
       case "for_statement": {
         const iterable = this.evaluate(statement.iterable, env);
-        const items = this.iterableToArray(iterable, statement);
+        // the pair form needs each entry's key as well as its value
+        const entries = statement.valueBinding
+          ? this.iterableToEntries(iterable, statement)
+          : this.iterableToArray(iterable, statement).map(
+              (item) => [null, item] as [Value | null, Value],
+            );
 
-        for (const item of items) {
+        for (const [key, item] of entries) {
           this.tick(statement.line, statement.column);
           // a fresh scope per turn so a closure captures that turn's binding
           const loopScope = new Environment(env);
-          loopScope.define(statement.binding, item);
+          if (statement.valueBinding) {
+            loopScope.define(statement.binding, key!);
+            loopScope.define(statement.valueBinding, item);
+          } else {
+            loopScope.define(statement.binding, item);
+          }
           try {
             this.executeBlock(statement.body, loopScope);
           } catch (signal) {
@@ -476,6 +486,30 @@ export class Evaluator {
 
     this.modules[name] = exports;
     return exports;
+  }
+
+  /**
+   * the key/value pairs `for k, v in ...` walks. an array or string yields its
+   * index alongside each element; an object yields its keys.
+   */
+  private iterableToEntries(
+    value: Value,
+    statement: Statement,
+  ): [Value, Value][] {
+    if (Array.isArray(value)) {
+      return value.map((item, index) => [index, item]);
+    }
+    if (typeof value === "string") {
+      return [...value].map((char, index) => [index, char]);
+    }
+    if (isObject(value)) {
+      return Object.entries(value).map(([key, item]) => [key, item]);
+    }
+    throw new RuntimeError(
+      `Cannot iterate over ${typeName(value)}`,
+      statement.line,
+      statement.column,
+    );
   }
 
   private iterableToArray(value: Value, statement: Statement): Value[] {
