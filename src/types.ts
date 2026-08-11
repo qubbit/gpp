@@ -235,6 +235,79 @@ function isObjectAssignable(
   return true;
 }
 
+// --- narrowing ------------------------------------------------------------
+
+/**
+ * removes `unwanted` from `type`, which is what an `x != nil` test proves about
+ * the true branch. a non union is left alone unless it is exactly the excluded
+ * type, and `any` stays `any`: narrowing must never make gradual code stricter
+ * than the author asked for.
+ */
+export function exclude(type: Type, unwanted: Type): Type {
+  if (isAny(type)) return type;
+
+  if (type.kind === "union") {
+    const kept = type.options.filter((option) => !typesEqual(option, unwanted));
+    // every option removed means the branch is unreachable
+    return kept.length === type.options.length ? type : unionOf(kept);
+  }
+
+  return typesEqual(type, unwanted) ? NEVER : type;
+}
+
+/**
+ * keeps only the members of `type` that the `type()` builtin would report as
+ * `name`, which is what a `type(x) == "number"` test proves.
+ */
+export function narrowToTypeName(type: Type, name: string): Type {
+  // an `any` value could be anything, so a positive test does tell us its type
+  if (isAny(type)) return fromTypeName(name) ?? type;
+
+  const matches = (option: Type) => runtimeTypeName(option) === name;
+
+  if (type.kind === "union") {
+    const kept = type.options.filter(matches);
+    return kept.length ? unionOf(kept) : NEVER;
+  }
+
+  return matches(type) ? type : NEVER;
+}
+
+/** the string `type()` reports for a value of this type, where one is known. */
+function runtimeTypeName(type: Type): string | null {
+  switch (type.kind) {
+    case "primitive":
+      // the checker calls it void; no runtime value has that type
+      return type.name === "void" ? null : type.name;
+    case "array":
+      return "array";
+    case "object":
+      return "object";
+    case "function":
+      return "function";
+    default:
+      return null;
+  }
+}
+
+/** the type a `type()` string denotes, for narrowing an `any`. */
+function fromTypeName(name: string): Type | null {
+  switch (name) {
+    case "number":
+      return NUMBER;
+    case "string":
+      return STRING;
+    case "bool":
+      return BOOL;
+    case "nil":
+      return NIL;
+    default:
+      // array, object and function have no element or shape here, so an `any`
+      // stays `any` rather than being narrowed to something wrong
+      return null;
+  }
+}
+
 /** the fields a source object has that the target does not declare. */
 export function extraFields(
   source: ObjectTypeInfo,

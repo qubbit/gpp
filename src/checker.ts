@@ -31,14 +31,54 @@ import {
   functionOf,
   isAny,
   isAssignable,
+  exclude,
   missingFields,
+  narrowToTypeName,
   objectOf,
+  typesEqual,
   unionOf,
   type FieldInfo,
   type FunctionTypeInfo,
   type ObjectTypeInfo,
   type Type,
 } from "./types.js";
+
+/**
+ * whether a block always leaves, so the statements after it are only reached
+ * when the branch was not taken. only the direct forms count: a return, break
+ * or continue at the top level of the block, or an if whose branches all leave.
+ */
+function alwaysLeaves(block: BlockStatement): boolean {
+  return block.body.some((statement) => {
+    if (
+      statement.kind === "return_statement" ||
+      statement.kind === "break_statement" ||
+      statement.kind === "continue_statement"
+    ) {
+      // a guarded return may not fire, so it does not count
+      return statement.kind !== "return_statement" || !statement.guard;
+    }
+    if (statement.kind === "if_statement" && statement.alternate) {
+      const alternate =
+        statement.alternate.kind === "block_statement"
+          ? alwaysLeaves(statement.alternate)
+          : alwaysLeaves({
+              kind: "block_statement",
+              body: [statement.alternate],
+              line: statement.line,
+              column: statement.column,
+            });
+      return alwaysLeaves(statement.consequent) && alternate;
+    }
+    return false;
+  });
+}
+
+/** renders a literal pattern's value the way a user would write it. */
+function stringifyLiteral(value: number | string | boolean | null): string {
+  if (value === null) return "nil";
+  return typeof value === "string" ? JSON.stringify(value) : String(value);
+}
 
 export interface TypeError {
   message: string;
@@ -217,6 +257,153 @@ export class Checker {
     }
 
     return { errors: this.errors };
+  }
+
+  // --- narrowing ------------------------------------------------------------
+
+  /**
+   * what a condition proves about the names it tests, as a pair of refinements:
+   * one to apply when the condition holds and one when it does not.
+   *
+   * only the shapes people actually write are recognised. anything else yields
+   * no refinement, which is always safe: narrowing may only ever make a type
+   * more precise, never wrong.
+   */
+  private narrowingsFor(
+    condition: Expression,
+    scope: Scope,
+  ): { whenTrue: Map<string, Type>; whenFalse: Map<string, Type> } {
+    const whenTrue = new Map<string, Type>();
+    const whenFalse = new Map<string, Type>();
+
+    // `!c` swaps what each branch learns
+    if (condition.kind === "unary_expression" && condition.operator === "!") {
+      const inner = this.narrowingsFor(condition.operand, scope);
+      return { whenTrue: inner.whenFalse, whenFalse: inner.whenTrue };
+    }
+
+    // `a && b` proves both in the true branch; the false branch could be
+    // either, so it learns nothing
+    if (condition.kind === "logical_expression" && condition.operator === "&&") {
+      const left = this.narrowingsFor(condition.left, scope);
+      const right = this.narrowingsFor(condition.right, scope);
+      return {
+        whenTrue: new Map([...left.whenTrue, ...right.whenTrue]),
+        whenFalse: new Map(),
+      };
+    }
+
+    // `a || b`: the false branch proves both failed
+    if (condition.kind === "logical_expression" && condition.operator === "||") {
+      const left = this.narrowingsFor(condition.left, scope);
+      const right = this.narrowingsFor(condition.right, scope);
+      return {
+        whenTrue: new Map(),
+        whenFalse: new Map([...left.whenFalse, ...right.whenFalse]),
+      };
+    }
+
+    if (condition.kind === "binary_expression") {
+      const { operator, left, right } = condition;
+      if (operator !== "==" && operator !== "!=") {
+        return { whenTrue, whenFalse };
+      }
+
+      // `x == nil` and `x != nil`, either way round
+      const nilTest = this.asNilTest(left, right);
+      if (nilTest) {
+        const current = scope.lookup(nilTest);
+        if (current) {
+          const withoutNil = exclude(current, NIL);
+          // `== nil` proves nil in the true branch, everything else in the false
+          if (operator === "==") {
+            whenTrue.set(nilTest, NIL);
+            whenFalse.set(nilTest, withoutNil);
+          } else {
+            whenTrue.set(nilTest, withoutNil);
+            whenFalse.set(nilTest, NIL);
+          }
+        }
+        return { whenTrue, whenFalse };
+      }
+
+      // `type(x) == "number"` and its negation
+      const typeTest = this.asTypeTest(left, right);
+      if (typeTest) {
+        const current = scope.lookup(typeTest.name);
+        if (current) {
+          const matching = narrowToTypeName(current, typeTest.expected);
+          const rest = this.excludeTypeName(current, typeTest.expected);
+          if (operator === "==") {
+            whenTrue.set(typeTest.name, matching);
+            whenFalse.set(typeTest.name, rest);
+          } else {
+            whenTrue.set(typeTest.name, rest);
+            whenFalse.set(typeTest.name, matching);
+          }
+        }
+      }
+      return { whenTrue, whenFalse };
+    }
+
+    // a bare `if x` on a nilable value proves it is not nil
+    if (condition.kind === "identifier") {
+      const current = scope.lookup(condition.name);
+      if (current) whenTrue.set(condition.name, exclude(current, NIL));
+    }
+
+    return { whenTrue, whenFalse };
+  }
+
+  /** the name in `x == nil` or `nil == x`, if the comparison is that shape. */
+  private asNilTest(left: Expression, right: Expression): string | null {
+    if (left.kind === "identifier" && right.kind === "nil_literal") {
+      return left.name;
+    }
+    if (right.kind === "identifier" && left.kind === "nil_literal") {
+      return right.name;
+    }
+    return null;
+  }
+
+  /** the name and expected type in `type(x) == "number"`, either way round. */
+  private asTypeTest(
+    left: Expression,
+    right: Expression,
+  ): { name: string; expected: string } | null {
+    const read = (call: Expression, literal: Expression) => {
+      if (
+        call.kind === "call_expression" &&
+        call.callee.kind === "identifier" &&
+        call.callee.name === "type" &&
+        call.args.length === 1 &&
+        call.args[0]!.kind === "identifier" &&
+        literal.kind === "string_literal"
+      ) {
+        return { name: call.args[0]!.name, expected: literal.value };
+      }
+      return null;
+    };
+    return read(left, right) ?? read(right, left);
+  }
+
+  /** the members of a type that `type()` would not report as `name`. */
+  private excludeTypeName(type: Type, name: string): Type {
+    if (isAny(type)) return type;
+    const matching = narrowToTypeName(type, name);
+    if (type.kind === "union") {
+      return unionOf(
+        type.options.filter((option) => !isAssignable(option, matching)),
+      );
+    }
+    return typesEqual(type, matching) ? NEVER : type;
+  }
+
+  /** a child scope with the given names refined. */
+  private scopeWith(parent: Scope, refinements: Map<string, Type>): Scope {
+    const scope = new Scope(parent);
+    for (const [name, type] of refinements) scope.define(name, type);
+    return scope;
   }
 
   private report(message: string, node: { line: number; column: number }): void {
@@ -460,12 +647,20 @@ export class Checker {
 
       case "if_statement": {
         this.checkExpression(statement.condition, scope, null);
-        this.checkBlock(statement.consequent, new Scope(scope));
+        // each branch sees what the condition proved about the names it tested
+        const { whenTrue, whenFalse } = this.narrowingsFor(
+          statement.condition,
+          scope,
+        );
+
+        this.checkBlock(statement.consequent, this.scopeWith(scope, whenTrue));
+
         if (statement.alternate) {
+          const elseScope = this.scopeWith(scope, whenFalse);
           if (statement.alternate.kind === "block_statement") {
-            this.checkBlock(statement.alternate, new Scope(scope));
+            this.checkBlock(statement.alternate, elseScope);
           } else {
-            this.checkStatement(statement.alternate, scope);
+            this.checkStatement(statement.alternate, elseScope);
           }
         }
         return;
@@ -637,9 +832,39 @@ export class Checker {
       }
     }
 
+    // a guarded return refines the statements after it: `return 0 if x == nil`
+    // means x is not nil from that point on, which is the early exit idiom
+    let current = scope;
     for (const statement of block.body) {
-      this.checkStatement(statement, scope);
+      this.checkStatement(statement, current);
+      current = this.afterStatement(statement, current);
     }
+  }
+
+  /**
+   * the scope the statements following this one should see.
+   *
+   * two shapes refine what comes after. a guarded return means reaching the
+   * next line proves the guard was false. an `if` whose body always leaves —
+   * the early exit idiom — means reaching the next line proves the condition
+   * was false.
+   */
+  private afterStatement(statement: Statement, scope: Scope): Scope {
+    if (statement.kind === "return_statement" && statement.guard) {
+      const { whenFalse } = this.narrowingsFor(statement.guard, scope);
+      return whenFalse.size ? this.scopeWith(scope, whenFalse) : scope;
+    }
+
+    if (
+      statement.kind === "if_statement" &&
+      !statement.alternate &&
+      alwaysLeaves(statement.consequent)
+    ) {
+      const { whenFalse } = this.narrowingsFor(statement.condition, scope);
+      return whenFalse.size ? this.scopeWith(scope, whenFalse) : scope;
+    }
+
+    return scope;
   }
 
   private checkFunctionBody(
@@ -937,21 +1162,22 @@ export class Checker {
 
       case "if_expression": {
         this.checkExpression(expression.condition, scope, null);
+        const { whenTrue, whenFalse } = this.narrowingsFor(
+          expression.condition,
+          scope,
+        );
 
         // the value is whichever branch ran, so the type is either
         const consequent = this.checkBlockValue(
           expression.consequent,
-          new Scope(scope),
+          this.scopeWith(scope, whenTrue),
           expected,
         );
+        const elseScope = this.scopeWith(scope, whenFalse);
         const alternate =
           expression.alternate.kind === "block_statement"
-            ? this.checkBlockValue(
-                expression.alternate,
-                new Scope(scope),
-                expected,
-              )
-            : this.checkExpression(expression.alternate, scope, expected);
+            ? this.checkBlockValue(expression.alternate, elseScope, expected)
+            : this.checkExpression(expression.alternate, elseScope, expected);
 
         return unionOf([consequent, alternate]);
       }
@@ -1104,8 +1330,94 @@ export class Checker {
       this.checkArm(arm, subject, scope, expected),
     );
 
+    this.checkExhaustive(expression, subject);
+
     // the match evaluates to whichever arm ran
     return unionOf(armTypes);
+  }
+
+  /**
+   * reports a match that cannot handle every value its subject may take.
+   *
+   * only fires when the subject's type is finite and known: a bool, or a union
+   * of things patterns can name. an `any` subject is left alone, because a
+   * warning there would break the promise that unannotated code is never
+   * rejected.
+   */
+  private checkExhaustive(
+    expression: Extract<Expression, { kind: "match_expression" }>,
+    subject: Type,
+  ): void {
+    if (isAny(subject)) return;
+
+    // an arm with a guard may not run even when its pattern matches, so it
+    // cannot be counted towards coverage
+    const unguarded = expression.arms.filter((arm) => arm.guard === null);
+
+    // a wildcard or a bare binding catches everything
+    const hasCatchAll = unguarded.some(
+      (arm) =>
+        arm.pattern.kind === "wildcard_pattern" ||
+        arm.pattern.kind === "binding_pattern",
+    );
+    if (hasCatchAll) return;
+
+    const missing = this.uncoveredCases(subject, unguarded);
+    if (missing.length === 0) return;
+
+    this.report(
+      `This match does not cover ${missing.join(", ")}. Add ${
+        missing.length === 1 ? "that case" : "those cases"
+      } or a _ arm.`,
+      expression,
+    );
+  }
+
+  /** the values of a finite subject type that no pattern matches. */
+  private uncoveredCases(subject: Type, arms: MatchArm[]): string[] {
+    const literals = new Set<string>();
+    for (const arm of arms) {
+      if (arm.pattern.kind === "literal_pattern") {
+        literals.add(stringifyLiteral(arm.pattern.value));
+      }
+    }
+
+    // the cases a type can take, where that set is finite and nameable
+    const casesOf = (type: Type): string[] | null => {
+      if (type.kind === "primitive") {
+        if (type.name === "bool") return ["true", "false"];
+        if (type.name === "nil") return ["nil"];
+      }
+      // number, string and everything else have too many values to enumerate,
+      // so a match over them is only exhaustive with a catch-all, which was
+      // handled above. naming the type is the most useful thing to say.
+      return null;
+    };
+
+    if (subject.kind === "union") {
+      // every member must be covered, and a member is covered either by its
+      // own literals or by an arm whose pattern accepts that whole member
+      const missing: string[] = [];
+      for (const option of subject.options) {
+        const cases = casesOf(option);
+        if (cases === null) {
+          // an unenumerable member needs a catch-all, which is absent here
+          missing.push(displayType(option));
+          continue;
+        }
+        for (const value of cases) {
+          if (!literals.has(value)) missing.push(value);
+        }
+      }
+      return missing;
+    }
+
+    const cases = casesOf(subject);
+    // no catch-all and no way to enumerate: some value will reach no arm
+    if (cases === null) {
+      return literals.size > 0 ? [`every other ${displayType(subject)}`] : [];
+    }
+    return cases.filter((value) => !literals.has(value));
   }
 
   private checkArm(
