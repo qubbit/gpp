@@ -735,25 +735,11 @@ export class Parser {
 
     this.expect(TokenType.Arrow, "after lambda parameters");
 
-    // plain parseExpression, so the body inherits the surrounding noBrace and
-    // singleLine context rather than resetting it
-    const value = this.parseExpression();
-
-    // the return and the block are synthetic: nothing in `(a) -> a*a` was
-    // written by the user, so they carry the body's position instead
-    const returnStatement: ReturnStatement = {
-      kind: "return_statement",
-      value,
-      line: value.line,
-      column: value.column,
-    };
-
-    const body: BlockStatement = {
-      kind: "block_statement",
-      body: [returnStatement],
-      line: value.line,
-      column: value.column,
-    };
+    // a `{` after the arrow opens a body, never an object literal, matching the
+    // rule match arms already use. `(x) -> ({a: 1})` returns an object.
+    const body = this.check(TokenType.LBrace)
+      ? this.parseBlock()
+      : this.expressionBody();
 
     return {
       kind: "function_expression",
@@ -763,6 +749,32 @@ export class Parser {
       body,
       line: token.line,
       column: token.column,
+    };
+  }
+
+  /**
+   * the body of an expression-bodied lambda, wrapped so it looks like a block
+   * that returns. the block and the return are synthetic — nothing in
+   * `(a) -> a*a` was written by the user — so both carry the body's position
+   * rather than the arrow's.
+   */
+  private expressionBody(): BlockStatement {
+    // plain parseExpression, so the body inherits the surrounding noBrace and
+    // singleLine context rather than resetting it
+    const value = this.parseExpression();
+
+    const returnStatement: ReturnStatement = {
+      kind: "return_statement",
+      value,
+      line: value.line,
+      column: value.column,
+    };
+
+    return {
+      kind: "block_statement",
+      body: [returnStatement],
+      line: value.line,
+      column: value.column,
     };
   }
 
