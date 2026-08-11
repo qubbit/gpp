@@ -106,6 +106,18 @@ button {
   cursor: pointer;
 }
 
+/* the browser default washes out muted text, so set both halves of the pair
+   explicitly. monaco styles its own selection and is unaffected. */
+::selection {
+  background: color-mix(in srgb, var(--primary) 26%, transparent);
+  color: var(--text);
+}
+
+[data-theme="dark"] ::selection {
+  background: color-mix(in srgb, var(--primary) 45%, transparent);
+  color: var(--neutral-0);
+}
+
 /* --- layout ------------------------------------------------------------- */
 
 .app {
@@ -569,5 +581,255 @@ button {
   * {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- guide page --------------------------------------------------------- */
+
+.guide {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.guide-nav {
+  border-right: 1px solid var(--border);
+  padding: 28px 0 40px 20px;
+}
+
+.guide-nav-inner {
+  position: sticky;
+  top: 28px;
+}
+
+.guide-nav-title {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.guide-nav ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  counter-reset: section;
+}
+
+.guide-nav li {
+  counter-increment: section;
+}
+
+.guide-nav a {
+  display: block;
+  padding: 5px 10px 5px 0;
+  border-left: 2px solid transparent;
+  padding-left: 10px;
+  color: var(--text-muted);
+  text-decoration: none;
+  font-size: 13px;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.guide-nav a::before {
+  content: counter(section) ". ";
+  opacity: 0.5;
+}
+
+.guide-nav a:hover {
+  color: var(--text);
+}
+
+.guide-nav a.current {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 500;
+}
+
+.guide-body {
+  max-width: 780px;
+  padding: 28px 32px 80px;
+  min-width: 0;
+}
+
+.guide-intro h1 {
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  font-variation-settings: "opsz" 40;
+  letter-spacing: -0.02em;
+  margin: 0 0 8px;
+  color: var(--text);
+}
+
+.guide-intro p {
+  margin: 0 0 8px;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.guide-section {
+  margin-top: 44px;
+  scroll-margin-top: 20px;
+}
+
+.guide-section h2 {
+  font-family: var(--font-display);
+  font-size: 23px;
+  font-weight: 600;
+  font-variation-settings: "opsz" 24;
+  margin: 0 0 6px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.guide-blurb {
+  margin: 0 0 20px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* --- a single runnable example ------------------------------------------ */
+
+.snippet {
+  margin-bottom: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+
+.snippet-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.snippet-head h3 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  font-variation-settings: "opsz" 16;
+  margin: 0;
+  margin-right: auto;
+}
+
+.snippet-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.button.small {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.snippet-note {
+  margin: 0;
+  padding: 11px 14px;
+  background: var(--bg-inset);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.snippet-editor {
+  background: var(--editor-bg);
+}
+
+.snippet-result {
+  border-top: 1px solid var(--border);
+}
+
+.snippet-output {
+  margin: 0;
+  padding: 11px 14px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.snippet-output.muted {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.snippet-error {
+  margin: 11px 14px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-sm);
+  background: var(--danger-bg);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.snippet-types {
+  list-style: none;
+  margin: 0;
+  padding: 10px 14px;
+}
+
+.snippet-types li {
+  padding: 5px 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--warning);
+}
+
+.guide-footer {
+  margin-top: 48px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 860px) {
+  .guide {
+    grid-template-columns: 1fr;
+  }
+
+  .guide-nav {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px;
+  }
+
+  .guide-nav-inner {
+    position: static;
+  }
+
+  .guide-nav ol {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+  }
+
+  .guide-nav a {
+    border-left: none;
+    padding: 2px 0;
+  }
+
+  .guide-nav a.current {
+    border-left: none;
+  }
+
+  .guide-body {
+    padding: 20px 16px 60px;
   }
 }

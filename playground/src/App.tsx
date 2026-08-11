@@ -6,7 +6,15 @@ import { execute, type ExecuteResult } from "@gpp/gpp.js";
 import { LANGUAGE_ID, registerGppLanguage } from "./gpp-language";
 import { AstView } from "./AstView";
 import { DEFAULT_SAMPLE, SAMPLES } from "./samples";
-import { buildShareUrl, readSourceFromUrl, updateUrl } from "./share";
+import {
+  buildShareUrl,
+  goToRoute,
+  readRoute,
+  readSourceFromUrl,
+  updateUrl,
+  type Route,
+} from "./share";
+import { GuidePage } from "./GuidePage";
 
 type RightPane = "output" | "ast" | "types";
 type Theme = "light" | "dark";
@@ -25,6 +33,7 @@ export default function App() {
   const [sampleId, setSampleId] = useState<string>(() =>
     readSourceFromUrl() ? "" : DEFAULT_SAMPLE.id,
   );
+  const [route, setRoute] = useState<Route>(readRoute);
 
   const editorRef = useRef<monacoTypes.editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
@@ -41,11 +50,13 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  // keep the url in step with the editor, debounced so typing stays cheap
+  // keep the url in step with the editor, debounced so typing stays cheap.
+  // the guide owns the fragment while it is showing, so skip it there.
   useEffect(() => {
+    if (route !== "playground") return;
     const timer = setTimeout(() => updateUrl(source), 400);
     return () => clearTimeout(timer);
-  }, [source]);
+  }, [source, route]);
 
   const runProgram = useCallback(() => {
     const next = execute(source);
@@ -65,6 +76,7 @@ export default function App() {
   // does not remount. pick the new program up rather than ignoring it.
   useEffect(() => {
     const onHashChange = () => {
+      setRoute(readRoute());
       const shared = readSourceFromUrl();
       // ignore the hash we just wrote ourselves
       if (shared === null || shared === source) return;
@@ -163,6 +175,48 @@ export default function App() {
 
   const typeErrorCount = result?.typeErrors.length ?? 0;
 
+  // the guide hands a program back, so a reader can carry on with it here
+  const openInPlayground = (next: string) => {
+    setSource(next);
+    setSampleId("");
+    setResult(execute(next));
+    setPane("output");
+    goToRoute("playground");
+  };
+
+  if (route === "guide") {
+    return (
+      <div className="app">
+        <header className="header">
+          <div className="brand">
+            <h1>gpp</h1>
+            <span className="tagline">A guide to the language</span>
+          </div>
+
+          <div className="toolbar">
+            <button
+              className="button icon"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+              title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+            >
+              {theme === "dark" ? "☀" : "☾"}
+            </button>
+
+            <button
+              className="button primary"
+              onClick={() => goToRoute("playground")}
+            >
+              Playground ▸
+            </button>
+          </div>
+        </header>
+
+        <GuidePage theme={theme} onOpenInPlayground={openInPlayground} />
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <header className="header">
@@ -174,6 +228,10 @@ export default function App() {
         </div>
 
         <div className="toolbar">
+          <button className="button" onClick={() => goToRoute("guide")}>
+            Guide
+          </button>
+
           <select
             className="select"
             value={sampleId}

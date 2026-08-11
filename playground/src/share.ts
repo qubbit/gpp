@@ -37,6 +37,31 @@ export function readSourceFromUrl(): string | null {
   return decodeSource(hash.slice(PREFIX.length));
 }
 
+// --- routing -------------------------------------------------------------
+
+// the guide lives at #guide. everything else is the playground, so a shared
+// #code= link keeps working exactly as before.
+const GUIDE_HASH = "#guide";
+
+export type Route = "playground" | "guide";
+
+export function readRoute(): Route {
+  return window.location.hash.startsWith(GUIDE_HASH) ? "guide" : "playground";
+}
+
+/** navigates, adding a history entry so the back button works. */
+export function goToRoute(route: Route): void {
+  if (route === "guide") {
+    window.location.hash = GUIDE_HASH.slice(1);
+    return;
+  }
+  // returning to the playground drops the fragment entirely
+  const { origin, pathname } = window.location;
+  window.history.pushState(null, "", `${origin}${pathname}`);
+  // pushState does not fire hashchange, so tell the app ourselves
+  window.dispatchEvent(new HashChangeEvent("hashchange"));
+}
+
 /** the shareable url for a given source. */
 export function buildShareUrl(source: string): string {
   const { origin, pathname } = window.location;
