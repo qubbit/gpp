@@ -224,10 +224,15 @@ export class Evaluator {
         return;
       }
 
-      case "return_statement":
+      case "return_statement": {
+        // `return 5 if x > 10` falls through when the guard is false
+        if (statement.guard && !isTruthy(this.evaluate(statement.guard, env))) {
+          return;
+        }
         throw new ReturnSignal(
           statement.value ? this.evaluate(statement.value, env) : null,
         );
+      }
 
       case "break_statement":
         throw new BreakSignal();
@@ -563,6 +568,17 @@ export class Evaluator {
           body: expression.body,
           closure: env,
         };
+
+      case "if_expression": {
+        // an else is required by the parser, so one branch always runs
+        const branch = isTruthy(this.evaluate(expression.condition, env))
+          ? expression.consequent
+          : expression.alternate;
+
+        return branch.kind === "block_statement"
+          ? this.executeBlockValue(branch, new Environment(env))
+          : this.evaluate(branch, env);
+      }
 
       case "match_expression":
         return this.evaluateMatch(expression, env);

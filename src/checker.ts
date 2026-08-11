@@ -478,6 +478,9 @@ export class Checker {
       }
 
       case "return_statement": {
+        if (statement.guard) {
+          this.checkExpression(statement.guard, scope, null);
+        }
         if (this.expectedReturn === null) {
           // the evaluator rejects this too, so flag it before it runs
           this.report("Cannot return from outside a function", statement);
@@ -558,6 +561,32 @@ export class Checker {
         }
         return;
     }
+  }
+
+  /**
+   * the type a block evaluates to: its last statement's, mirroring how the
+   * evaluator computes an implicit return. only a trailing expression carries
+   * a value; anything else yields nil.
+   */
+  private checkBlockValue(
+    block: BlockStatement,
+    scope: Scope,
+    expected: Type | null,
+  ): Type {
+    for (const statement of block.body) {
+      if (statement.kind === "function_declaration") {
+        scope.define(statement.name, this.signatureOf(statement));
+      }
+    }
+
+    let value: Type = NIL;
+    for (const statement of block.body) {
+      value =
+        statement.kind === "expression_statement"
+          ? this.checkExpression(statement.expression, scope, expected)
+          : (this.checkStatement(statement, scope), NIL);
+    }
+    return value;
   }
 
   private checkBlock(block: BlockStatement, scope: Scope): void {
@@ -831,6 +860,27 @@ export class Checker {
           scope,
         );
         return signature;
+      }
+
+      case "if_expression": {
+        this.checkExpression(expression.condition, scope, null);
+
+        // the value is whichever branch ran, so the type is either
+        const consequent = this.checkBlockValue(
+          expression.consequent,
+          new Scope(scope),
+          expected,
+        );
+        const alternate =
+          expression.alternate.kind === "block_statement"
+            ? this.checkBlockValue(
+                expression.alternate,
+                new Scope(scope),
+                expected,
+              )
+            : this.checkExpression(expression.alternate, scope, expected);
+
+        return unionOf([consequent, alternate]);
       }
 
       case "match_expression":

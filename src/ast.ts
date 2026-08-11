@@ -116,6 +116,7 @@ export type Expression =
   | MemberExpression
   | IndexExpression
   | FunctionExpression
+  | IfExpression
   | MatchExpression;
 
 export interface NumberLiteral extends Position {
@@ -216,6 +217,17 @@ export interface Parameter extends Position {
   type: TypeNode | null;
 }
 
+// `let s = if n > 0 { "pos" } else { "neg" }`. distinct from IfStatement: an
+// if in expression position must produce a value, so both branches are blocks
+// whose last statement is the result, and an else is required.
+export interface IfExpression extends Position {
+  kind: "if_expression";
+  condition: Expression;
+  consequent: BlockStatement;
+  // an `else if` chain nests another if_expression here
+  alternate: BlockStatement | IfExpression;
+}
+
 export interface MatchExpression extends Position {
   kind: "match_expression";
   subject: Expression;
@@ -308,6 +320,8 @@ export interface FunctionDeclaration extends Position {
 export interface ReturnStatement extends Position {
   kind: "return_statement";
   value: Expression | null;
+  // `return 5 if x > 10` returns only when the guard holds
+  guard: Expression | null;
 }
 
 export interface BreakStatement extends Position {

@@ -255,6 +255,69 @@ describe("functions", () => {
   });
 });
 
+describe("if as an expression", () => {
+  test("it evaluates to the branch that ran", () => {
+    const source = (n: string) =>
+      `let v = if ${n} > 0 {\n "positive"\n} else if ${n} < 0 {\n "negative"\n} else {\n "zero"\n}\nprint(v)`;
+    assert.equal(prints(source("5")), "positive");
+    assert.equal(prints(source("-5")), "negative");
+    assert.equal(prints(source("0")), "zero");
+  });
+
+  test("a branch yields its last statement", () => {
+    assert.equal(
+      prints("let v = if true {\n let a = 2\n a * 21\n} else {\n 0\n}\nprint(v)"),
+      "42",
+    );
+  });
+
+  test("it can be used anywhere an expression can", () => {
+    assert.equal(prints('print(if 1 > 0 { "yes" } else { "no" })'), "yes");
+    assert.equal(
+      prints('print("n is " + if 1 > 0 { "pos" } else { "neg" })'),
+      "n is pos",
+    );
+  });
+
+  // without an else a false condition would have nothing to evaluate to
+  test("an else is required", () => {
+    assert.match(
+      errorOf("let v = if true { 1 }") ?? "",
+      /needs an else/,
+    );
+  });
+
+  test("the statement form still works without an else", () => {
+    assert.equal(prints('if 1 > 0 {\n print("pos")\n}'), "pos");
+  });
+});
+
+describe("guarded return", () => {
+  test("it returns only when the guard holds", () => {
+    const source = "fn f(x) {\n return 5 if x > 10\n return 0\n}";
+    assert.equal(prints(source + "\nprint(f(20))"), "5");
+    assert.equal(prints(source + "\nprint(f(1))"), "0");
+  });
+
+  test("a false guard falls through to the rest of the body", () => {
+    const source = 'fn f(x) {\n return "big" if x > 10\n "small"\n}';
+    assert.equal(prints(source + "\nprint(f(20))"), "big");
+    assert.equal(prints(source + "\nprint(f(1))"), "small");
+  });
+
+  // `return if done` reads as "return, if done", so the if is the guard
+  test("a bare return may be guarded", () => {
+    assert.deepEqual(
+      output('fn f(x) {\n return if x\n print("continued")\n}\nf(false)\nf(true)'),
+      ["continued"],
+    );
+  });
+
+  test("an unguarded return is unaffected", () => {
+    assert.equal(prints("fn f() {\n return 7\n}\nprint(f())"), "7");
+  });
+});
+
 describe("implicit return", () => {
   test("a trailing if yields the branch that ran", () => {
     const source = (n: string) =>

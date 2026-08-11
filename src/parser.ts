@@ -7,6 +7,7 @@ import type {
   ExportStatement,
   FunctionDeclaration,
   Identifier,
+  IfExpression,
   IfStatement,
   ImportStatement,
   ImportSpecifier,
@@ -433,18 +434,30 @@ export class Parser {
   private parseReturn(): Statement {
     const token = this.expect(TokenType.Return, "to start a return");
 
-    // a value must begin on the same line, otherwise this is a bare return
+    // a value must begin on the same line, otherwise this is a bare return.
+    // an `if` directly after `return` is the guard of a bare return, not a
+    // value: `return if done` reads as "return, if done".
     const hasValue =
       !this.check(TokenType.RBrace) &&
       !this.check(TokenType.Semicolon) &&
+      !this.check(TokenType.If) &&
       !this.isAtEnd() &&
       this.peek().line === token.line;
 
     const value = hasValue ? this.parseExpression() : null;
+
+    // `return 5 if x > 10` is a trailing guard, not the start of an if
+    // statement. it only reads that way on the same line as the return.
+    const guard =
+      this.check(TokenType.If) && this.peek().line === token.line
+        ? (this.advance(), this.parseHeaderExpression())
+        : null;
+
     this.endStatement();
     return {
       kind: "return_statement",
       value,
+      guard,
       line: token.line,
       column: token.column,
     };
@@ -766,6 +779,7 @@ export class Parser {
     const returnStatement: ReturnStatement = {
       kind: "return_statement",
       value,
+      guard: null,
       line: value.line,
       column: value.column,
     };
@@ -846,6 +860,9 @@ export class Parser {
           throw this.error(`Unexpected token '${token.lexeme}' in expression`);
         }
         return this.parseObjectLiteral();
+
+      case TokenType.If:
+        return this.parseIfExpression();
 
       case TokenType.Match:
         return this.parseMatch();
@@ -934,6 +951,36 @@ export class Parser {
       params,
       returnType,
       body,
+      line: token.line,
+      column: token.column,
+    };
+  }
+
+  /**
+   * `if` in expression position, which must produce a value. an else is
+   * required: without one a false condition would have nothing to evaluate to.
+   */
+  private parseIfExpression(): IfExpression {
+    const token = this.expect(TokenType.If, "to start an if expression");
+    const condition = this.parseHeaderExpression();
+    const consequent = this.parseBlock();
+
+    if (!this.match(TokenType.Else)) {
+      throw this.error(
+        "An if used as an expression needs an else, since it must produce a value",
+        token,
+      );
+    }
+
+    const alternate = this.check(TokenType.If)
+      ? this.parseIfExpression()
+      : this.parseBlock();
+
+    return {
+      kind: "if_expression",
+      condition,
+      consequent,
+      alternate,
       line: token.line,
       column: token.column,
     };
