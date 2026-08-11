@@ -197,8 +197,23 @@ describe("functions", () => {
     assert.equal(prints("fn double(x) {\n return x * 2\n}\nprint(double(21))"), "42");
   });
 
-  test("a function without a return yields nil", () => {
+  test("an empty function body yields nil", () => {
     assert.equal(prints("fn f() {\n}\nprint(f())"), "nil");
+  });
+
+  // a body that falls off the end yields its last statement's value
+  test("a function returns its last expression implicitly", () => {
+    assert.equal(prints("fn f() {\n 42\n}\nprint(f())"), "42");
+    assert.equal(prints("fn double(x) {\n x * 2\n}\nprint(double(21))"), "42");
+  });
+
+  test("an explicit return still wins over the implicit one", () => {
+    assert.equal(prints("fn f() {\n return 1\n 2\n}\nprint(f())"), "1");
+  });
+
+  test("a statement with no value yields nil", () => {
+    assert.equal(prints("fn f() {\n let x = 1\n}\nprint(f())"), "nil");
+    assert.equal(prints("fn f() {\n while false {\n }\n}\nprint(f())"), "nil");
   });
 
   test("recursion", () => {
@@ -240,6 +255,71 @@ describe("functions", () => {
   });
 });
 
+describe("implicit return", () => {
+  test("a trailing if yields the branch that ran", () => {
+    const source = (n: string) =>
+      `fn f(x) {\n if x > 0 {\n  "pos"\n } else {\n  "neg"\n }\n}\nprint(f(${n}))`;
+    assert.equal(prints(source("1")), "pos");
+    assert.equal(prints(source("-1")), "neg");
+  });
+
+  test("an else if chain yields the branch that ran", () => {
+    const source = (n: string) =>
+      `fn f(x) {\n if x > 0 {\n  "pos"\n } else if x < 0 {\n  "neg"\n } else {\n  "zero"\n }\n}\nprint(f(${n}))`;
+    assert.equal(prints(source("1")), "pos");
+    assert.equal(prints(source("-1")), "neg");
+    assert.equal(prints(source("0")), "zero");
+  });
+
+  // there is no branch to take a value from
+  test("an if with no else that did not run yields nil", () => {
+    assert.equal(prints('fn f(x) {\n if x {\n  "yes"\n }\n}\nprint(f(false))'), "nil");
+  });
+
+  test("a trailing match yields the arm that matched", () => {
+    assert.equal(
+      prints('fn f(x) {\n match x {\n  1 -> "one"\n  _ -> "other"\n }\n}\nprint(f(1))'),
+      "one",
+    );
+  });
+
+  test("a block bodied match arm yields its last statement", () => {
+    assert.equal(
+      prints('let v = match 1 {\n 1 -> {\n  "from a block"\n }\n _ -> "no"\n}\nprint(v)'),
+      "from a block",
+    );
+  });
+
+  test("a nested block yields its last statement", () => {
+    assert.equal(prints("fn f() {\n {\n  7\n }\n}\nprint(f())"), "7");
+  });
+
+  test("an early return inside a branch still unwinds", () => {
+    assert.equal(
+      prints('fn f(x) {\n if x {\n  return "early"\n }\n "fell through"\n}\nprint(f(true))'),
+      "early",
+    );
+    assert.equal(
+      prints('fn f(x) {\n if x {\n  return "early"\n }\n "fell through"\n}\nprint(f(false))'),
+      "fell through",
+    );
+  });
+
+  test("a loop contributes no value", () => {
+    assert.equal(
+      prints("fn f() {\n let n = 0\n while n < 3 {\n  n += 1\n }\n}\nprint(f())"),
+      "nil",
+    );
+  });
+
+  test("statements before the last one are still run", () => {
+    assert.deepEqual(
+      output('fn f() {\n print("side effect")\n "value"\n}\nprint(f())'),
+      ["side effect", "value"],
+    );
+  });
+});
+
 // lambdas desugar to function_expression in the parser, so the evaluator needs
 // no lambda-specific handling. these tests exist to prove that.
 describe("lambdas", () => {
@@ -255,10 +335,17 @@ describe("lambdas", () => {
     assert.equal(prints("let f = (a, b) -> a*a + b*b\nprint(f(3, 4))"), "25");
   });
 
-  test("a brace body needs an explicit return", () => {
+  test("a brace body returns explicitly or implicitly", () => {
     assert.equal(prints("let f = (x) -> {\n return x * 2\n}\nprint(f(21))"), "42");
-    // no return, so it falls off the end and yields nil
-    assert.equal(prints("let f = (x) -> {\n x + 1\n}\nprint(f(1))"), "nil");
+    // falls off the end, so the last statement's value is returned
+    assert.equal(prints("let f = (x) -> {\n x + 1\n}\nprint(f(1))"), "2");
+  });
+
+  test("the target syntax from the design", () => {
+    assert.deepEqual(
+      output("let f = (x, y) -> {\n print(x)\n x + y\n}\nprint(f(1, 2))"),
+      ["1", "3"],
+    );
   });
 
   test("a lambda captures its defining scope", () => {

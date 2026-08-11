@@ -264,6 +264,58 @@ export class Evaluator {
     }
   }
 
+  /**
+   * runs a block and yields the value of its last statement, which is what a
+   * function body falls back on when it has no explicit `return`.
+   *
+   * only a trailing expression, `if` or `match` carries a value. a block ending
+   * in a declaration, an assignment or a loop yields nil, because those
+   * statements have no value to give.
+   */
+  private executeBlockValue(block: BlockStatement, scope: Environment): Value {
+    let value: Value = null;
+
+    for (const statement of block.body) {
+      value = this.executeValue(statement, scope);
+    }
+
+    return value;
+  }
+
+  /** runs one statement, yielding its value when it has one. */
+  private executeValue(statement: Statement, scope: Environment): Value {
+    switch (statement.kind) {
+      case "expression_statement":
+        return this.evaluate(statement.expression, scope);
+
+      case "block_statement":
+        return this.executeBlockValue(statement, new Environment(scope));
+
+      case "if_statement": {
+        if (isTruthy(this.evaluate(statement.condition, scope))) {
+          return this.executeBlockValue(
+            statement.consequent,
+            new Environment(scope),
+          );
+        }
+        if (!statement.alternate) {
+          // an if with no else that did not run produced nothing
+          return null;
+        }
+        // an `else if` chain nests another if_statement here
+        return statement.alternate.kind === "block_statement"
+          ? this.executeBlockValue(statement.alternate, new Environment(scope))
+          : this.executeValue(statement.alternate, scope);
+      }
+
+      default:
+        // everything else is a statement in the ordinary sense: run it for its
+        // effect, and contribute no value
+        this.execute(statement, scope);
+        return null;
+    }
+  }
+
   private executeAssignment(
     statement: Extract<Statement, { kind: "assignment_statement" }>,
     env: Environment,
@@ -629,13 +681,13 @@ export class Evaluator {
     });
 
     try {
-      this.executeBlock(callee.body, scope);
+      // a body that falls off the end yields its last statement's value; an
+      // explicit `return` unwinds first and still wins
+      return this.executeBlockValue(callee.body, scope);
     } catch (signal) {
       if (signal instanceof ReturnSignal) return signal.value;
       throw signal;
     }
-    // a function with no return statement yields null
-    return null;
   }
 
   private binaryOp(
@@ -723,14 +775,9 @@ export class Evaluator {
 
   private evaluateArmBody(arm: MatchArm, scope: Environment): Value {
     if (arm.body.kind === "block_statement") {
-      try {
-        this.executeBlock(arm.body, new Environment(scope));
-      } catch (signal) {
-        if (signal instanceof ReturnSignal) throw signal;
-        throw signal;
-      }
-      // a block bodied arm evaluates to null unless it returns
-      return null;
+      // like a function body, a block arm yields its last statement's value.
+      // a `return` inside it still unwinds to the enclosing function.
+      return this.executeBlockValue(arm.body, new Environment(scope));
     }
     return this.evaluate(arm.body, scope);
   }
