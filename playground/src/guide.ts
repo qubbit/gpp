@@ -591,6 +591,85 @@ println(strict(21))
 // strict("nope")       // uncomment: cannot pass string as argument 1`,
       },
       {
+        title: "Narrowing",
+        note:
+          "Testing a value refines its type inside the branch, so a union becomes usable without a cast. The refinement belongs to that branch only.",
+        source: `fn describe(value: number | nil): string {
+  // outside the test, value could be either
+  if value == nil {
+    return "nothing"
+  }
+
+  // in here the checker knows it is a number
+  return "the number {value * 2}"
+}
+
+println(describe(21))
+println(describe(nil))
+
+// a guarded return refines everything after it
+fn double_or_zero(x: number | nil): number {
+  return 0 if x == nil
+  // x is a number from here on
+  x * 2
+}
+
+println(double_or_zero(5), double_or_zero(nil))
+
+// testing with type() works the same way
+fn render(v: number | string): string {
+  if type(v) == "number" {
+    return "number: {v + 0}"
+  }
+  return "string: {upper(v)}"
+}
+
+println(render(7))
+println(render("hi"))`,
+      },
+      {
+        title: "Exhaustive matching",
+        note:
+          "When the checker knows every value a subject can take, it reports a match that misses one. Add the missing case or a _ arm. An unannotated value is left alone.",
+        source: `interface Point {
+  x: number
+  y: number
+}
+
+// bool has two values, so both must be handled
+fn describe(flag: bool): string {
+  return match flag {
+    true -> "on"
+    false -> "off"
+  }
+}
+
+println(describe(true), describe(false))
+
+// uncomment the last arm below and the warning goes away.
+// open the Types tab to see it.
+fn label(v: bool | nil): string {
+  return match v {
+    true -> "yes"
+    false -> "no"
+    _ -> "unset"
+  }
+}
+
+println(label(true), label(nil))
+
+// a guard may not run, so an arm that has one does not count as coverage
+fn sign(n: number): string {
+  return match n {
+    v if v > 0 -> "positive"
+    v if v < 0 -> "negative"
+    _ -> "zero"
+  }
+}
+
+println(sign(3), sign(-3), sign(0))`,
+      },
+      {
         title: "Interfaces are structural",
         note:
           "Any object with the right shape satisfies an interface. Extra fields are fine; missing required ones are not.",

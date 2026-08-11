@@ -43,6 +43,43 @@ import {
   type Type,
 } from "./types.js";
 
+/**
+ * whether a block always leaves, so the statements after it are only reached
+ * when the branch was not taken. only the direct forms count: a return, break
+ * or continue at the top level of the block, or an if whose branches all leave.
+ */
+function alwaysLeaves(block: BlockStatement): boolean {
+  return block.body.some((statement) => {
+    if (
+      statement.kind === "return_statement" ||
+      statement.kind === "break_statement" ||
+      statement.kind === "continue_statement"
+    ) {
+      // a guarded return may not fire, so it does not count
+      return statement.kind !== "return_statement" || !statement.guard;
+    }
+    if (statement.kind === "if_statement" && statement.alternate) {
+      const alternate =
+        statement.alternate.kind === "block_statement"
+          ? alwaysLeaves(statement.alternate)
+          : alwaysLeaves({
+              kind: "block_statement",
+              body: [statement.alternate],
+              line: statement.line,
+              column: statement.column,
+            });
+      return alwaysLeaves(statement.consequent) && alternate;
+    }
+    return false;
+  });
+}
+
+/** renders a literal pattern's value the way a user would write it. */
+function stringifyLiteral(value: number | string | boolean | null): string {
+  if (value === null) return "nil";
+  return typeof value === "string" ? JSON.stringify(value) : String(value);
+}
+
 export interface TypeError {
   message: string;
   line: number;
@@ -805,14 +842,29 @@ export class Checker {
   }
 
   /**
-   * the scope the statements following this one should see. only a guarded
-   * return refines anything today: reaching the next line means the guard was
-   * false, so whatever it disproved holds from here on.
+   * the scope the statements following this one should see.
+   *
+   * two shapes refine what comes after. a guarded return means reaching the
+   * next line proves the guard was false. an `if` whose body always leaves —
+   * the early exit idiom — means reaching the next line proves the condition
+   * was false.
    */
   private afterStatement(statement: Statement, scope: Scope): Scope {
-    if (statement.kind !== "return_statement" || !statement.guard) return scope;
-    const { whenFalse } = this.narrowingsFor(statement.guard, scope);
-    return whenFalse.size ? this.scopeWith(scope, whenFalse) : scope;
+    if (statement.kind === "return_statement" && statement.guard) {
+      const { whenFalse } = this.narrowingsFor(statement.guard, scope);
+      return whenFalse.size ? this.scopeWith(scope, whenFalse) : scope;
+    }
+
+    if (
+      statement.kind === "if_statement" &&
+      !statement.alternate &&
+      alwaysLeaves(statement.consequent)
+    ) {
+      const { whenFalse } = this.narrowingsFor(statement.condition, scope);
+      return whenFalse.size ? this.scopeWith(scope, whenFalse) : scope;
+    }
+
+    return scope;
   }
 
   private checkFunctionBody(
@@ -1278,8 +1330,94 @@ export class Checker {
       this.checkArm(arm, subject, scope, expected),
     );
 
+    this.checkExhaustive(expression, subject);
+
     // the match evaluates to whichever arm ran
     return unionOf(armTypes);
+  }
+
+  /**
+   * reports a match that cannot handle every value its subject may take.
+   *
+   * only fires when the subject's type is finite and known: a bool, or a union
+   * of things patterns can name. an `any` subject is left alone, because a
+   * warning there would break the promise that unannotated code is never
+   * rejected.
+   */
+  private checkExhaustive(
+    expression: Extract<Expression, { kind: "match_expression" }>,
+    subject: Type,
+  ): void {
+    if (isAny(subject)) return;
+
+    // an arm with a guard may not run even when its pattern matches, so it
+    // cannot be counted towards coverage
+    const unguarded = expression.arms.filter((arm) => arm.guard === null);
+
+    // a wildcard or a bare binding catches everything
+    const hasCatchAll = unguarded.some(
+      (arm) =>
+        arm.pattern.kind === "wildcard_pattern" ||
+        arm.pattern.kind === "binding_pattern",
+    );
+    if (hasCatchAll) return;
+
+    const missing = this.uncoveredCases(subject, unguarded);
+    if (missing.length === 0) return;
+
+    this.report(
+      `This match does not cover ${missing.join(", ")}. Add ${
+        missing.length === 1 ? "that case" : "those cases"
+      } or a _ arm.`,
+      expression,
+    );
+  }
+
+  /** the values of a finite subject type that no pattern matches. */
+  private uncoveredCases(subject: Type, arms: MatchArm[]): string[] {
+    const literals = new Set<string>();
+    for (const arm of arms) {
+      if (arm.pattern.kind === "literal_pattern") {
+        literals.add(stringifyLiteral(arm.pattern.value));
+      }
+    }
+
+    // the cases a type can take, where that set is finite and nameable
+    const casesOf = (type: Type): string[] | null => {
+      if (type.kind === "primitive") {
+        if (type.name === "bool") return ["true", "false"];
+        if (type.name === "nil") return ["nil"];
+      }
+      // number, string and everything else have too many values to enumerate,
+      // so a match over them is only exhaustive with a catch-all, which was
+      // handled above. naming the type is the most useful thing to say.
+      return null;
+    };
+
+    if (subject.kind === "union") {
+      // every member must be covered, and a member is covered either by its
+      // own literals or by an arm whose pattern accepts that whole member
+      const missing: string[] = [];
+      for (const option of subject.options) {
+        const cases = casesOf(option);
+        if (cases === null) {
+          // an unenumerable member needs a catch-all, which is absent here
+          missing.push(displayType(option));
+          continue;
+        }
+        for (const value of cases) {
+          if (!literals.has(value)) missing.push(value);
+        }
+      }
+      return missing;
+    }
+
+    const cases = casesOf(subject);
+    // no catch-all and no way to enumerate: some value will reach no arm
+    if (cases === null) {
+      return literals.size > 0 ? [`every other ${displayType(subject)}`] : [];
+    }
+    return cases.filter((value) => !literals.has(value));
   }
 
   private checkArm(

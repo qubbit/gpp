@@ -519,6 +519,24 @@ describe("narrowing", () => {
     clean("fn f(x: number | nil): number {\n return 0 if x == nil\n return x\n}");
   });
 
+  // the early exit idiom: if the branch always leaves, reaching the next line
+  // proves the condition was false
+  test("an if that always returns refines the rest of the block", () => {
+    clean(
+      'fn f(x: number | nil): string {\n if x == nil {\n  return "none"\n }\n return "got {x * 2}"\n}',
+    );
+    clean(
+      'fn f(v: number | string): string {\n if type(v) == "number" {\n  return "n"\n }\n return upper(v)\n}',
+    );
+  });
+
+  test("a branch that may fall through does not refine", () => {
+    rejects(
+      'fn f(x: number | nil) {\n if x == nil {\n  println("none")\n }\n let n: number = x\n}',
+      /Cannot assign number \| nil to number/,
+    );
+  });
+
   test("a bare if refines a nilable value", () => {
     clean("fn f(x: number | nil) {\n if x {\n  let n: number = x\n }\n}");
   });
@@ -555,6 +573,54 @@ describe("narrowing", () => {
   // narrowing must never make gradual code stricter than the author asked for
   test("an any value stays usable as anything", () => {
     clean("fn f(x) {\n if x != nil {\n  let n: number = x\n  let s: string = x\n }\n}");
+  });
+});
+
+describe("exhaustive matching", () => {
+  test("a bool subject must cover both values", () => {
+    clean("fn f(b: bool) {\n match b {\n  true -> 1\n  false -> 2\n }\n}");
+    rejects(
+      "fn f(b: bool) {\n match b {\n  true -> 1\n }\n}",
+      /does not cover false/,
+    );
+  });
+
+  test("every member of a union must be covered", () => {
+    clean("fn f(x: bool | nil) {\n match x {\n  true -> 1\n  false -> 2\n  nil -> 3\n }\n}");
+    rejects(
+      "fn f(x: bool | nil) {\n match x {\n  true -> 1\n  false -> 2\n }\n}",
+      /does not cover nil/,
+    );
+  });
+
+  test("a catch-all satisfies the check", () => {
+    clean("fn f(b: bool) {\n match b {\n  true -> 1\n  _ -> 2\n }\n}");
+    // a bare binding catches everything too
+    clean("fn f(b: bool) {\n match b {\n  v -> v\n }\n}");
+  });
+
+  // a guard may fail even when the pattern matches, so the arm cannot be
+  // counted towards coverage
+  test("a guarded arm does not count as coverage", () => {
+    rejects(
+      "fn f(b: bool) {\n match b {\n  true if b -> 1\n  false -> 2\n }\n}",
+      /does not cover true/,
+    );
+  });
+
+  test("an unenumerable subject needs a catch-all", () => {
+    rejects(
+      'fn f(n: number) {\n match n {\n  1 -> "one"\n }\n}',
+      /does not cover every other number/,
+    );
+    clean('fn f(n: number) {\n match n {\n  1 -> "one"\n  _ -> "other"\n }\n}');
+  });
+
+  // warning on an any subject would break the promise that unannotated code
+  // is never rejected
+  test("an any subject is left alone", () => {
+    clean('fn f(x) {\n match x {\n  1 -> "one"\n }\n}');
+    clean("fn f(v) {\n match v {\n  true -> 1\n }\n}");
   });
 });
 
