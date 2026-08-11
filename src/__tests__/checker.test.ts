@@ -503,6 +503,61 @@ describe("lambdas", () => {
   });
 });
 
+describe("narrowing", () => {
+  test("a nil test refines the branch", () => {
+    clean("fn f(x: number | nil) {\n if x != nil {\n  let n: number = x\n }\n}");
+    clean("fn f(x: number | nil) {\n if x == nil {\n } else {\n  let n: number = x\n }\n}");
+  });
+
+  test("a type test refines the branch", () => {
+    clean('fn f(x: number | string) {\n if type(x) == "number" {\n  let n: number = x\n }\n}');
+    clean('fn f(x: number | string) {\n if type(x) != "number" {\n  let s: string = x\n }\n}');
+  });
+
+  // the early exit idiom: reaching the next line means the guard was false
+  test("a guarded return refines the rest of the block", () => {
+    clean("fn f(x: number | nil): number {\n return 0 if x == nil\n return x\n}");
+  });
+
+  test("a bare if refines a nilable value", () => {
+    clean("fn f(x: number | nil) {\n if x {\n  let n: number = x\n }\n}");
+  });
+
+  test("and narrows both operands, not inverts", () => {
+    clean(
+      "fn f(x: number | nil, y: number | nil) {\n if x != nil && y != nil {\n  let a: number = x\n  let b: number = y\n }\n}",
+    );
+    clean("fn f(x: number | nil) {\n if !(x == nil) {\n  let n: number = x\n }\n}");
+  });
+
+  test("the wrong branch is still rejected", () => {
+    rejects(
+      "fn f(x: number | nil) {\n if x != nil {\n } else {\n  let n: number = x\n }\n}",
+      /Cannot assign nil to number/,
+    );
+  });
+
+  test("an unrelated name is not narrowed", () => {
+    rejects(
+      "fn f(x: number | nil, y: number | nil) {\n if x != nil {\n  let n: number = y\n }\n}",
+      /Cannot assign number \| nil to number/,
+    );
+  });
+
+  // a refinement belongs to its branch, not to the enclosing scope
+  test("narrowing does not leak past the if", () => {
+    rejects(
+      "fn f(x: number | nil) {\n if x != nil {\n  let a: number = x\n }\n let n: number = x\n}",
+      /Cannot assign number \| nil to number/,
+    );
+  });
+
+  // narrowing must never make gradual code stricter than the author asked for
+  test("an any value stays usable as anything", () => {
+    clean("fn f(x) {\n if x != nil {\n  let n: number = x\n  let s: string = x\n }\n}");
+  });
+});
+
 describe("nil", () => {
   test("the literal has type nil", () => {
     rejects("let n: number = nil", /Cannot assign nil to number/);

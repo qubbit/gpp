@@ -31,8 +31,11 @@ import {
   functionOf,
   isAny,
   isAssignable,
+  exclude,
   missingFields,
+  narrowToTypeName,
   objectOf,
+  typesEqual,
   unionOf,
   type FieldInfo,
   type FunctionTypeInfo,
@@ -217,6 +220,153 @@ export class Checker {
     }
 
     return { errors: this.errors };
+  }
+
+  // --- narrowing ------------------------------------------------------------
+
+  /**
+   * what a condition proves about the names it tests, as a pair of refinements:
+   * one to apply when the condition holds and one when it does not.
+   *
+   * only the shapes people actually write are recognised. anything else yields
+   * no refinement, which is always safe: narrowing may only ever make a type
+   * more precise, never wrong.
+   */
+  private narrowingsFor(
+    condition: Expression,
+    scope: Scope,
+  ): { whenTrue: Map<string, Type>; whenFalse: Map<string, Type> } {
+    const whenTrue = new Map<string, Type>();
+    const whenFalse = new Map<string, Type>();
+
+    // `!c` swaps what each branch learns
+    if (condition.kind === "unary_expression" && condition.operator === "!") {
+      const inner = this.narrowingsFor(condition.operand, scope);
+      return { whenTrue: inner.whenFalse, whenFalse: inner.whenTrue };
+    }
+
+    // `a && b` proves both in the true branch; the false branch could be
+    // either, so it learns nothing
+    if (condition.kind === "logical_expression" && condition.operator === "&&") {
+      const left = this.narrowingsFor(condition.left, scope);
+      const right = this.narrowingsFor(condition.right, scope);
+      return {
+        whenTrue: new Map([...left.whenTrue, ...right.whenTrue]),
+        whenFalse: new Map(),
+      };
+    }
+
+    // `a || b`: the false branch proves both failed
+    if (condition.kind === "logical_expression" && condition.operator === "||") {
+      const left = this.narrowingsFor(condition.left, scope);
+      const right = this.narrowingsFor(condition.right, scope);
+      return {
+        whenTrue: new Map(),
+        whenFalse: new Map([...left.whenFalse, ...right.whenFalse]),
+      };
+    }
+
+    if (condition.kind === "binary_expression") {
+      const { operator, left, right } = condition;
+      if (operator !== "==" && operator !== "!=") {
+        return { whenTrue, whenFalse };
+      }
+
+      // `x == nil` and `x != nil`, either way round
+      const nilTest = this.asNilTest(left, right);
+      if (nilTest) {
+        const current = scope.lookup(nilTest);
+        if (current) {
+          const withoutNil = exclude(current, NIL);
+          // `== nil` proves nil in the true branch, everything else in the false
+          if (operator === "==") {
+            whenTrue.set(nilTest, NIL);
+            whenFalse.set(nilTest, withoutNil);
+          } else {
+            whenTrue.set(nilTest, withoutNil);
+            whenFalse.set(nilTest, NIL);
+          }
+        }
+        return { whenTrue, whenFalse };
+      }
+
+      // `type(x) == "number"` and its negation
+      const typeTest = this.asTypeTest(left, right);
+      if (typeTest) {
+        const current = scope.lookup(typeTest.name);
+        if (current) {
+          const matching = narrowToTypeName(current, typeTest.expected);
+          const rest = this.excludeTypeName(current, typeTest.expected);
+          if (operator === "==") {
+            whenTrue.set(typeTest.name, matching);
+            whenFalse.set(typeTest.name, rest);
+          } else {
+            whenTrue.set(typeTest.name, rest);
+            whenFalse.set(typeTest.name, matching);
+          }
+        }
+      }
+      return { whenTrue, whenFalse };
+    }
+
+    // a bare `if x` on a nilable value proves it is not nil
+    if (condition.kind === "identifier") {
+      const current = scope.lookup(condition.name);
+      if (current) whenTrue.set(condition.name, exclude(current, NIL));
+    }
+
+    return { whenTrue, whenFalse };
+  }
+
+  /** the name in `x == nil` or `nil == x`, if the comparison is that shape. */
+  private asNilTest(left: Expression, right: Expression): string | null {
+    if (left.kind === "identifier" && right.kind === "nil_literal") {
+      return left.name;
+    }
+    if (right.kind === "identifier" && left.kind === "nil_literal") {
+      return right.name;
+    }
+    return null;
+  }
+
+  /** the name and expected type in `type(x) == "number"`, either way round. */
+  private asTypeTest(
+    left: Expression,
+    right: Expression,
+  ): { name: string; expected: string } | null {
+    const read = (call: Expression, literal: Expression) => {
+      if (
+        call.kind === "call_expression" &&
+        call.callee.kind === "identifier" &&
+        call.callee.name === "type" &&
+        call.args.length === 1 &&
+        call.args[0]!.kind === "identifier" &&
+        literal.kind === "string_literal"
+      ) {
+        return { name: call.args[0]!.name, expected: literal.value };
+      }
+      return null;
+    };
+    return read(left, right) ?? read(right, left);
+  }
+
+  /** the members of a type that `type()` would not report as `name`. */
+  private excludeTypeName(type: Type, name: string): Type {
+    if (isAny(type)) return type;
+    const matching = narrowToTypeName(type, name);
+    if (type.kind === "union") {
+      return unionOf(
+        type.options.filter((option) => !isAssignable(option, matching)),
+      );
+    }
+    return typesEqual(type, matching) ? NEVER : type;
+  }
+
+  /** a child scope with the given names refined. */
+  private scopeWith(parent: Scope, refinements: Map<string, Type>): Scope {
+    const scope = new Scope(parent);
+    for (const [name, type] of refinements) scope.define(name, type);
+    return scope;
   }
 
   private report(message: string, node: { line: number; column: number }): void {
@@ -460,12 +610,20 @@ export class Checker {
 
       case "if_statement": {
         this.checkExpression(statement.condition, scope, null);
-        this.checkBlock(statement.consequent, new Scope(scope));
+        // each branch sees what the condition proved about the names it tested
+        const { whenTrue, whenFalse } = this.narrowingsFor(
+          statement.condition,
+          scope,
+        );
+
+        this.checkBlock(statement.consequent, this.scopeWith(scope, whenTrue));
+
         if (statement.alternate) {
+          const elseScope = this.scopeWith(scope, whenFalse);
           if (statement.alternate.kind === "block_statement") {
-            this.checkBlock(statement.alternate, new Scope(scope));
+            this.checkBlock(statement.alternate, elseScope);
           } else {
-            this.checkStatement(statement.alternate, scope);
+            this.checkStatement(statement.alternate, elseScope);
           }
         }
         return;
@@ -637,9 +795,24 @@ export class Checker {
       }
     }
 
+    // a guarded return refines the statements after it: `return 0 if x == nil`
+    // means x is not nil from that point on, which is the early exit idiom
+    let current = scope;
     for (const statement of block.body) {
-      this.checkStatement(statement, scope);
+      this.checkStatement(statement, current);
+      current = this.afterStatement(statement, current);
     }
+  }
+
+  /**
+   * the scope the statements following this one should see. only a guarded
+   * return refines anything today: reaching the next line means the guard was
+   * false, so whatever it disproved holds from here on.
+   */
+  private afterStatement(statement: Statement, scope: Scope): Scope {
+    if (statement.kind !== "return_statement" || !statement.guard) return scope;
+    const { whenFalse } = this.narrowingsFor(statement.guard, scope);
+    return whenFalse.size ? this.scopeWith(scope, whenFalse) : scope;
   }
 
   private checkFunctionBody(
@@ -937,21 +1110,22 @@ export class Checker {
 
       case "if_expression": {
         this.checkExpression(expression.condition, scope, null);
+        const { whenTrue, whenFalse } = this.narrowingsFor(
+          expression.condition,
+          scope,
+        );
 
         // the value is whichever branch ran, so the type is either
         const consequent = this.checkBlockValue(
           expression.consequent,
-          new Scope(scope),
+          this.scopeWith(scope, whenTrue),
           expected,
         );
+        const elseScope = this.scopeWith(scope, whenFalse);
         const alternate =
           expression.alternate.kind === "block_statement"
-            ? this.checkBlockValue(
-                expression.alternate,
-                new Scope(scope),
-                expected,
-              )
-            : this.checkExpression(expression.alternate, scope, expected);
+            ? this.checkBlockValue(expression.alternate, elseScope, expected)
+            : this.checkExpression(expression.alternate, elseScope, expected);
 
         return unionOf([consequent, alternate]);
       }
