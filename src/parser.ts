@@ -149,6 +149,36 @@ export class Parser {
     return new ParseError(message, token.line, token.column);
   }
 
+  private looksLikeLambda(): boolean {
+    let depth = 0;
+    let offset = 0;
+    while (true) {
+      const s = this.peek(offset);
+      if (s.type == TokenType.EOF) {
+        return false;
+      }
+      if (
+        [TokenType.LParen, TokenType.LBracket, TokenType.LBrace].includes(
+          s.type,
+        )
+      ) {
+        depth++;
+      }
+      if (
+        [TokenType.RParen, TokenType.RBracket, TokenType.RBrace].includes(
+          s.type,
+        )
+      ) {
+        depth--;
+      }
+      if (depth == 0) {
+        break;
+      }
+      offset++;
+    }
+    return this.peek(offset + 1).type == TokenType.Arrow;
+  }
+
   /**
    * statements are newline-terminated; semicolons are optional. the lexer drops
    * newlines, so a statement boundary is inferred from a line change instead.
@@ -189,7 +219,11 @@ export class Parser {
     if (this.check(TokenType.Break)) {
       const token = this.advance();
       this.endStatement();
-      return { kind: "break_statement", line: token.line, column: token.column };
+      return {
+        kind: "break_statement",
+        line: token.line,
+        column: token.column,
+      };
     }
     if (this.check(TokenType.Continue)) {
       const token = this.advance();
@@ -202,7 +236,10 @@ export class Parser {
     }
 
     // `fn name(...)` declares; a bare `fn(...)` is an expression.
-    if (this.check(TokenType.Fn) && this.peek(1).type === TokenType.Identifier) {
+    if (
+      this.check(TokenType.Fn) &&
+      this.peek(1).type === TokenType.Identifier
+    ) {
       return this.parseFunctionDeclaration();
     }
 
@@ -239,7 +276,10 @@ export class Parser {
     const token = this.peek();
     const expression = this.parseExpression();
 
-    if (this.check(TokenType.Assignment) || this.check(TokenType.CompoundAssignment)) {
+    if (
+      this.check(TokenType.Assignment) ||
+      this.check(TokenType.CompoundAssignment)
+    ) {
       const operator = this.advance();
       if (
         expression.kind !== "identifier" &&
@@ -332,7 +372,10 @@ export class Parser {
   private parseFor(): Statement {
     const token = this.expect(TokenType.For, "to start a for loop");
     const binding = this.expect(TokenType.Identifier, "as the loop variable");
-    const inKeyword = this.expect(TokenType.Identifier, "after the loop variable");
+    const inKeyword = this.expect(
+      TokenType.Identifier,
+      "after the loop variable",
+    );
     if (inKeyword.lexeme !== "in") {
       throw this.error("Expected 'in' in for loop", inKeyword);
     }
@@ -413,7 +456,8 @@ export class Parser {
 
     const fields: TypeField[] = [];
     while (!this.check(TokenType.RBrace) && !this.isAtEnd()) {
-      if (this.match(TokenType.Semicolon) || this.match(TokenType.Comma)) continue;
+      if (this.match(TokenType.Semicolon) || this.match(TokenType.Comma))
+        continue;
       const fieldName = this.expect(TokenType.Identifier, "as a field name");
       // `name?: type` marks the field optional
       const optional = this.match(TokenType.Question);
@@ -480,7 +524,9 @@ export class Parser {
     const token = this.expect(TokenType.Export, "to start an export");
     const names: string[] = [];
     do {
-      names.push(this.expect(TokenType.Identifier, "as an exported name").lexeme);
+      names.push(
+        this.expect(TokenType.Identifier, "as an exported name").lexeme,
+      );
     } while (this.match(TokenType.Comma));
 
     this.endStatement();
@@ -676,6 +722,13 @@ export class Parser {
     }
   }
 
+  private parseLambda(): Expression {
+    const token = this.peek();
+    const params = this.parseParameters();
+    this.expect(TokenType.Arrow, "after lambda parameters");
+    throw this.error("lambda bodies not implemented yet");
+  }
+
   private parsePrimary(): Expression {
     const token = this.peek();
 
@@ -726,6 +779,9 @@ export class Parser {
         };
 
       case TokenType.LParen: {
+        if (this.looksLikeLambda()) {
+          return this.parseLambda();
+        }
         this.advance();
         const inner = this.parseNestedExpression();
         this.expect(TokenType.RParen, "to close a grouped expression");
@@ -841,7 +897,8 @@ export class Parser {
 
     const arms: MatchArm[] = [];
     while (!this.check(TokenType.RBrace) && !this.isAtEnd()) {
-      if (this.match(TokenType.Semicolon) || this.match(TokenType.Comma)) continue;
+      if (this.match(TokenType.Semicolon) || this.match(TokenType.Comma))
+        continue;
 
       const armStart = this.peek();
       const pattern = this.parsePattern();
@@ -1113,7 +1170,8 @@ export class Parser {
       this.advance();
       const fields: TypeField[] = [];
       while (!this.check(TokenType.RBrace) && !this.isAtEnd()) {
-        if (this.match(TokenType.Semicolon) || this.match(TokenType.Comma)) continue;
+        if (this.match(TokenType.Semicolon) || this.match(TokenType.Comma))
+          continue;
         const name = this.expect(TokenType.Identifier, "as a field name");
         const optional = this.match(TokenType.Question);
         this.expect(TokenType.Colon, "after a field name");
