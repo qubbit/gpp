@@ -650,6 +650,59 @@ println(area(Empty()))
 // }`,
       },
       {
+        title: "Returning on every path",
+        note:
+          "A function that declares a return type must actually produce one on every path. Falling off the end yields nil, which the annotation says will not happen.",
+        source: `// this is checked: every path must produce a number
+fn classify(n: number): string {
+  if n > 0 {
+    return "positive"
+  } else if n < 0 {
+    return "negative"
+  }
+  // without this line the checker reports the gap
+  "zero"
+}
+
+println(classify(3), classify(-3), classify(0))
+
+// a trailing value counts, since a body yields its last statement
+fn double(n: number): number {
+  n * 2
+}
+
+// so does an if expression, because both branches produce one
+fn sign(n: number): string {
+  if n >= 0 { "non-negative" } else { "negative" }
+}
+
+println(double(21), sign(-1))
+
+// if the absence is deliberate, say so in the type
+fn first_positive(ns: number[]): number | nil {
+  for n in ns {
+    return n if n > 0
+  }
+}
+
+println(first_positive([-1, 4]), first_positive([-1, -2]))
+
+// unannotated functions are never checked, since they return any
+fn loose(x) {
+  if x {
+    return 1
+  }
+}
+println(loose(false))
+
+// uncomment to see the report:
+// fn broken(x: number): number {
+//   if x > 0 {
+//     return x
+//   }
+// }`,
+      },
+      {
         title: "Narrowing",
         note:
           "Testing a value refines its type inside the branch, so a union becomes usable without a cast. The refinement belongs to that branch only.",
