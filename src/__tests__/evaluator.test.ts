@@ -129,7 +129,7 @@ describe("tagged variants", () => {
       "12",
     );
     assert.equal(
-      prints('type O =\n | None\n | Some {value: any}\nprintln(match None() {\n None {} -> "nothing"\n Some {value} -> value\n})'),
+      prints('type O =\n | None {}\n | Some {value: any}\nprintln(match None() {\n None {} -> "nothing"\n Some {value} -> value\n})'),
       "nothing",
     );
   });
@@ -144,7 +144,7 @@ describe("tagged variants", () => {
   // a variant prints as the call that built it, not as the object underneath
   test("a variant prints as its constructor", () => {
     assert.equal(prints(RESULT + "println(Ok(5))"), "Ok(5)");
-    assert.equal(prints("type O =\n | None\nprintln(None())"), "None()");
+    assert.equal(prints("type O =\n | None {}\nprintln(None())"), "None()");
   });
 
   test("type_of reports the variant name", () => {
@@ -636,6 +636,17 @@ describe("guarded return", () => {
     assert.deepEqual(
       output('fn f(x) {\n return if x\n println("continued")\n}\nf(false)\nf(true)'),
       ["continued"],
+    );
+  });
+
+  test("the returned value may be an object or array literal", () => {
+    assert.deepEqual(
+      output("fn f(x, y) {\n return {x: 1, y: 1} if x == 0 && y == 0\n ({x: x, y: y})\n}\nprintln(f(0, 0))\nprintln(f(2, 3))"),
+      ["{x: 1, y: 1}", "{x: 2, y: 3}"],
+    );
+    assert.deepEqual(
+      output("fn f(x) {\n return [1, 2] if x\n []\n}\nprintln(f(true))\nprintln(f(false))"),
+      ["[1, 2]", "[]"],
     );
   });
 

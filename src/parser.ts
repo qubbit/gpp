@@ -20,6 +20,7 @@ import type {
   MatchArm,
   MatchExpression,
   MemberExpression,
+  NamedType,
   IndexExpression,
   ObjectLiteral,
   ObjectPattern,
@@ -208,7 +209,23 @@ export class Parser {
       }
       offset++;
     }
-    return this.peek(offset + 1).type == TokenType.Arrow;
+    // an optional `: type` sits between the parameters and the arrow, so skip
+    // a return annotation before deciding
+    let after = offset + 1;
+    if (this.peek(after).type === TokenType.Colon) {
+      after++;
+      // a type is a run of names, brackets and separators; stop at the arrow
+      let guard = 0;
+      while (
+        this.peek(after).type !== TokenType.Arrow &&
+        this.peek(after).type !== TokenType.EOF &&
+        guard++ < 32
+      ) {
+        after++;
+      }
+    }
+
+    return this.peek(after).type == TokenType.Arrow;
   }
 
   /**
@@ -434,6 +451,7 @@ export class Parser {
   private parseFunctionDeclaration(): FunctionDeclaration {
     const token = this.expect(TokenType.Fn, "to start a function");
     const name = this.expect(TokenType.Identifier, "as the function name");
+    const typeParams = this.parseTypeParams();
     const params = this.parseParameters();
     const returnType = this.match(TokenType.Colon) ? this.parseType() : null;
     const body = this.parseBlock();
@@ -441,6 +459,7 @@ export class Parser {
     return {
       kind: "function_declaration",
       name: name.lexeme,
+      typeParams,
       params,
       returnType,
       body,
@@ -473,12 +492,17 @@ export class Parser {
     const token = this.expect(TokenType.Return, "to start a return");
 
     // a value must begin on the same line, otherwise this is a bare return.
-    // an `if` directly after `return` is the guard of a bare return, not a
-    // value: `return if done` reads as "return, if done".
+    //
+    // an `if` directly after `return` is ambiguous: `return if done` is a
+    // guarded bare return, while `return if x { a } else { b }` returns the
+    // value of an if expression. an if expression always has a braced body,
+    // so scanning ahead for one separates them.
+    const bareGuard = this.check(TokenType.If) && !this.ifHasBlock();
+
     const hasValue =
       !this.check(TokenType.RBrace) &&
       !this.check(TokenType.Semicolon) &&
-      !this.check(TokenType.If) &&
+      !bareGuard &&
       !this.isAtEnd() &&
       this.peek().line === token.line;
 
@@ -501,9 +525,62 @@ export class Parser {
     };
   }
 
+  /**
+   * whether the `if` at the cursor is an expression rather than a guard, by
+   * looking for the `{` that opens its body before the line ends.
+   */
+  private ifHasBlock(): boolean {
+    let offset = 1;
+    let depth = 0;
+    const line = this.peek().line;
+
+    for (let guard = 0; guard < 128; guard++) {
+      const token = this.peek(offset);
+      if (token.type === TokenType.EOF) return false;
+      // a guard ends at the line break; an if expression opens its body first
+      if (token.line !== line) return false;
+
+      if (
+        token.type === TokenType.LParen ||
+        token.type === TokenType.LBracket
+      ) {
+        depth++;
+      }
+      if (
+        token.type === TokenType.RParen ||
+        token.type === TokenType.RBracket
+      ) {
+        depth--;
+      }
+      // a brace at the top level of the condition opens the body
+      if (token.type === TokenType.LBrace && depth === 0) return true;
+
+      offset++;
+    }
+    return false;
+  }
+
   private parseInterface(): InterfaceDeclaration {
     const token = this.expect(TokenType.Interface, "to start an interface");
     const name = this.expect(TokenType.Identifier, "as the interface name");
+    const typeParams = this.parseTypeParams();
+
+    // `extends A, B` inherits every parent's fields
+    const parents: NamedType[] = [];
+    if (this.check(TokenType.Identifier) && this.peek().lexeme === "extends") {
+      this.advance();
+      do {
+        const parent = this.expect(TokenType.Identifier, "as a parent interface");
+        parents.push({
+          kind: "named_type",
+          name: parent.lexeme,
+          args: this.parseTypeArgs(),
+          line: parent.line,
+          column: parent.column,
+        });
+      } while (this.match(TokenType.Comma));
+    }
+
     this.expect(TokenType.LBrace, "to open the interface body");
 
     const fields: TypeField[] = [];
@@ -528,6 +605,8 @@ export class Parser {
     return {
       kind: "interface_declaration",
       name: name.lexeme,
+      extends: parents,
+      typeParams,
       fields,
       line: token.line,
       column: token.column,
@@ -545,35 +624,72 @@ export class Parser {
   private parseTypeDeclaration(): TypeDeclaration {
     const token = this.expect(TokenType.Type, "to start a type declaration");
     const name = this.expect(TokenType.Identifier, "as the type name");
+    const typeParams = this.parseTypeParams();
     this.expect(TokenType.Assignment, "after the type name");
 
-    const variants: VariantDeclaration[] = [];
-
-    // `|` lexes as a binary operator, so variants are separated by lexeme
+    // `|` lexes as a binary operator, so alternatives are separated by lexeme
     const atBar = () =>
       this.check(TokenType.BinaryOperator) && this.peek().lexeme === "|";
 
-    // the bar before the first variant is optional
+    // the bar before the first alternative is optional
     if (atBar()) this.advance();
 
+    // a named alternative followed by `{` or `|` is a variant; anything else
+    // is a type expression, which makes the whole declaration an alias
+    if (!this.looksLikeVariant()) {
+      const alias = this.parseType();
+      this.endStatement();
+      return {
+        kind: "type_declaration",
+        name: name.lexeme,
+        typeParams,
+        variants: [],
+        alias,
+        line: token.line,
+        column: token.column,
+      };
+    }
+
+    const variants: VariantDeclaration[] = [];
     for (;;) {
+      if (!this.looksLikeVariant()) {
+        throw this.error(
+          "A variant needs a field block, so a fieldless one is written " +
+            "`Empty {}`. A type is either a union of variants or a plain " +
+            "alias, never both.",
+        );
+      }
       variants.push(this.parseVariant());
       if (!atBar()) break;
       this.advance();
-    }
-
-    if (variants.length === 0) {
-      throw this.error("A type needs at least one variant", token);
     }
 
     this.endStatement();
     return {
       kind: "type_declaration",
       name: name.lexeme,
+      typeParams,
       variants,
+      alias: null,
       line: token.line,
       column: token.column,
     };
+  }
+
+  /**
+   * whether the next alternative declares a variant rather than continuing a
+   * type expression.
+   *
+   * the rule is deliberately narrow: a variant is a name followed by `{`.
+   * a bare name is always a type reference, because `type C = A | B` would
+   * otherwise be ambiguous between two fieldless variants and an alias for a
+   * union of two interfaces. a variant with no fields is written `Empty {}`.
+   */
+  private looksLikeVariant(): boolean {
+    if (!this.check(TokenType.Identifier)) return false;
+    const next = this.peek(1);
+    // the brace must be on the same line, so a following block is not eaten
+    return next.type === TokenType.LBrace && next.line === this.peek().line;
   }
 
   /** `Circle {radius: number}`, or `Nothing` for a variant with no fields. */
@@ -859,6 +975,9 @@ export class Parser {
     // visually starts, which is the position errors should point at
     const token = this.peek();
     const params = this.parseParameters();
+    // `(n): string -> ...` annotates the result, which is what lets a generic
+    // call infer its return type rather than falling back to any
+    const returnType = this.match(TokenType.Colon) ? this.parseType() : null;
 
     this.expect(TokenType.Arrow, "after lambda parameters");
 
@@ -871,8 +990,9 @@ export class Parser {
     return {
       kind: "function_expression",
       name: null,
+      typeParams: [],
       params,
-      returnType: null,
+      returnType,
       body,
       line: token.line,
       column: token.column,
@@ -1107,6 +1227,7 @@ export class Parser {
     const name = this.check(TokenType.Identifier)
       ? this.advance().lexeme
       : null;
+    const typeParams = this.parseTypeParams();
     const params = this.parseParameters();
     const returnType = this.match(TokenType.Colon) ? this.parseType() : null;
     const body = this.parseBlock();
@@ -1114,6 +1235,7 @@ export class Parser {
     return {
       kind: "function_expression",
       name,
+      typeParams,
       params,
       returnType,
       body,
@@ -1410,15 +1532,61 @@ export class Parser {
 
   // --- types ----------------------------------------------------------------
 
+  /**
+   * `<T, U>` after a name. `<` and `>` lex as binary operators, so they are
+   * matched by lexeme, and an absent list is simply an empty array.
+   */
+  private parseTypeParams(): string[] {
+    if (!this.isAngle("<")) return [];
+    this.advance();
+
+    const params: string[] = [];
+    while (!this.isAngle(">") && !this.isAtEnd()) {
+      params.push(this.expect(TokenType.Identifier, "as a type parameter").lexeme);
+      if (!this.match(TokenType.Comma)) break;
+    }
+
+    if (!this.isAngle(">")) {
+      throw this.error("Expected > to close the type parameters");
+    }
+    this.advance();
+    return params;
+  }
+
+  /** `<number, string>` at a use site, supplying a generic's arguments. */
+  private parseTypeArgs(): TypeNode[] {
+    if (!this.isAngle("<")) return [];
+    this.advance();
+
+    const args: TypeNode[] = [];
+    while (!this.isAngle(">") && !this.isAtEnd()) {
+      args.push(this.parseType());
+      if (!this.match(TokenType.Comma)) break;
+    }
+
+    if (!this.isAngle(">")) {
+      throw this.error("Expected > to close the type arguments");
+    }
+    this.advance();
+    return args;
+  }
+
+  /** `<` and `>` arrive as binary operators, so they are read by lexeme. */
+  private isAngle(bracket: "<" | ">"): boolean {
+    return (
+      this.check(TokenType.BinaryOperator) && this.peek().lexeme === bracket
+    );
+  }
+
   /** a type is one or more alternatives separated by `|`. */
   private parseType(): TypeNode {
-    const first = this.parseTypeSuffix();
+    const first = this.parseIntersectionType();
     if (!this.isUnionBar()) return first;
 
     const options: TypeNode[] = [first];
     while (this.isUnionBar()) {
       this.advance();
-      options.push(this.parseTypeSuffix());
+      options.push(this.parseIntersectionType());
     }
 
     return {
@@ -1432,6 +1600,29 @@ export class Parser {
   // `|` arrives as a binary operator token, so unions are detected by lexeme.
   private isUnionBar(): boolean {
     return this.check(TokenType.BinaryOperator) && this.peek().lexeme === "|";
+  }
+
+  /** `A & B`, which binds tighter than `|` the way it does in typescript. */
+  private parseIntersectionType(): TypeNode {
+    const first = this.parseTypeSuffix();
+    if (!this.isAmpersand()) return first;
+
+    const operands: TypeNode[] = [first];
+    while (this.isAmpersand()) {
+      this.advance();
+      operands.push(this.parseTypeSuffix());
+    }
+
+    return {
+      kind: "intersection_type",
+      operands,
+      line: first.line,
+      column: first.column,
+    };
+  }
+
+  private isAmpersand(): boolean {
+    return this.check(TokenType.BinaryOperator) && this.peek().lexeme === "&";
   }
 
   /** applies trailing `[]` to make array types. */
@@ -1510,6 +1701,7 @@ export class Parser {
       return {
         kind: "named_type",
         name: token.lexeme,
+        args: this.parseTypeArgs(),
         line: token.line,
         column: token.column,
       };

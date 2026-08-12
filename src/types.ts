@@ -7,6 +7,7 @@
 export type Type =
   | AnyType
   | NeverType
+  | TypeParam
   | PrimitiveType
   | ArrayTypeInfo
   | ObjectTypeInfo
@@ -23,6 +24,16 @@ export interface AnyType {
 // cannot be reached; assignable to everything, nothing is assignable to it.
 export interface NeverType {
   kind: "never";
+}
+
+/**
+ * a generic's parameter, standing for a type not yet known. it is resolved by
+ * substitution at each use site; one that survives into a check behaves like
+ * `any`, so an uninstantiated generic never produces spurious errors.
+ */
+export interface TypeParam {
+  kind: "param";
+  name: string;
 }
 
 export interface PrimitiveType {
@@ -73,6 +84,114 @@ export const STRING: PrimitiveType = { kind: "primitive", name: "string" };
 export const BOOL: PrimitiveType = { kind: "primitive", name: "bool" };
 export const NIL: PrimitiveType = { kind: "primitive", name: "nil" };
 export const VOID: PrimitiveType = { kind: "primitive", name: "void" };
+
+export function paramOf(name: string): TypeParam {
+  return { kind: "param", name };
+}
+
+/** replaces every type parameter in `type` using `bindings`. */
+export function substitute(type: Type, bindings: Map<string, Type>): Type {
+  if (bindings.size === 0) return type;
+
+  switch (type.kind) {
+    case "param":
+      return bindings.get(type.name) ?? type;
+    case "array":
+      return arrayOf(substitute(type.element, bindings));
+    case "function":
+      return functionOf(
+        type.params.map((param) => substitute(param, bindings)),
+        substitute(type.returns, bindings),
+      );
+    case "union":
+      return unionOf(type.options.map((o) => substitute(o, bindings)));
+    case "object": {
+      const fields = new Map<string, FieldInfo>();
+      for (const [name, field] of type.fields) {
+        fields.set(name, {
+          type: substitute(field.type, bindings),
+          optional: field.optional,
+        });
+      }
+      const options: { name?: string; exact?: boolean; variant?: string } = {};
+      if (type.name !== undefined) options.name = type.name;
+      if (type.exact !== undefined) options.exact = type.exact;
+      if (type.variant !== undefined) options.variant = type.variant;
+      return objectOf(fields, options);
+    }
+    default:
+      return type;
+  }
+}
+
+/**
+ * matches an argument's type against a parameter's, recording what each type
+ * parameter must be. this is the inference that lets `id(1)` work without
+ * writing `id<number>(1)`.
+ */
+export function inferParams(
+  parameter: Type,
+  argument: Type,
+  bindings: Map<string, Type>,
+): void {
+  switch (parameter.kind) {
+    case "param": {
+      // an `any` argument says nothing about the parameter. letting it widen
+      // would erase a binding a real argument already pinned down, which is
+      // what an unannotated lambda would otherwise do to filter's element.
+      if (isAny(argument)) return;
+
+      const existing = bindings.get(parameter.name);
+      // a parameter appearing twice widens to cover both uses
+      bindings.set(
+        parameter.name,
+        existing ? unionOf([existing, argument]) : argument,
+      );
+      return;
+    }
+    case "array":
+      if (argument.kind === "array") {
+        inferParams(parameter.element, argument.element, bindings);
+      }
+      return;
+    case "function":
+      if (argument.kind === "function") {
+        parameter.params.forEach((p, i) => {
+          const a = argument.params[i];
+          if (a) inferParams(p, a, bindings);
+        });
+        inferParams(parameter.returns, argument.returns, bindings);
+      }
+      return;
+    case "object":
+      if (argument.kind === "object") {
+        for (const [name, field] of parameter.fields) {
+          const match = argument.fields.get(name);
+          if (match) inferParams(field.type, match.type, bindings);
+        }
+      }
+      return;
+    default:
+      return;
+  }
+}
+
+/** merges objects into one shape, which is what `A & B` denotes. */
+export function intersectionOf(operands: Type[]): Type {
+  if (operands.some(isAny)) return ANY;
+
+  const objects = operands.filter(
+    (operand): operand is ObjectTypeInfo => operand.kind === "object",
+  );
+  // only object intersections are meaningful; anything else has no values
+  if (objects.length !== operands.length) return NEVER;
+
+  const fields = new Map<string, FieldInfo>();
+  for (const operand of objects) {
+    for (const [name, field] of operand.fields) fields.set(name, field);
+  }
+  return objectOf(fields);
+}
 
 export function arrayOf(element: Type): ArrayTypeInfo {
   return { kind: "array", element };
@@ -134,6 +253,9 @@ export function typesEqual(a: Type, b: Type): boolean {
     case "never":
       return true;
 
+    case "param":
+      return a.name === (b as TypeParam).name;
+
     case "primitive":
       return a.name === (b as PrimitiveType).name;
 
@@ -182,6 +304,9 @@ export function typesEqual(a: Type, b: Type): boolean {
  */
 export function isAssignable(source: Type, target: Type): boolean {
   if (isAny(source) || isAny(target)) return true;
+  // an uninstantiated parameter behaves like any, so a generic body checks
+  // without knowing what it will be called with
+  if (source.kind === "param" || target.kind === "param") return true;
   if (source.kind === "never") return true;
   if (typesEqual(source, target)) return true;
 
@@ -348,6 +473,8 @@ export function displayType(type: Type): string {
       return "any";
     case "never":
       return "never";
+    case "param":
+      return type.name;
     case "primitive":
       return type.name;
     case "array": {

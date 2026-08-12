@@ -32,7 +32,11 @@ import {
   isAny,
   isAssignable,
   exclude,
+  inferParams,
+  intersectionOf,
   missingFields,
+  paramOf,
+  substitute,
   narrowToTypeName,
   objectOf,
   typesEqual,
@@ -102,33 +106,49 @@ const PRELUDE_TYPES: Record<string, Type> = {
   len: functionOf([ANY], NUMBER),
 
   // arrays
-  push: functionOf([arrayOf(ANY), ANY], arrayOf(ANY)),
-  pop: functionOf([arrayOf(ANY)], ANY),
+  push: functionOf([arrayOf(paramOf("T")), paramOf("T")], arrayOf(paramOf("T"))),
+  pop: functionOf([arrayOf(paramOf("T"))], paramOf("T")),
   slice: functionOf([arrayOf(ANY), NUMBER, NUMBER], arrayOf(ANY)),
   concat: functionOf([arrayOf(ANY), arrayOf(ANY)], arrayOf(ANY)),
-  reverse: functionOf([arrayOf(ANY)], arrayOf(ANY)),
+  reverse: functionOf([arrayOf(paramOf("T"))], arrayOf(paramOf("T"))),
   contains: functionOf([ANY, ANY], BOOL),
   range: functionOf([NUMBER, NUMBER], arrayOf(NUMBER)),
 
-  // higher order
-  map: functionOf([arrayOf(ANY), functionOf([ANY], ANY)], arrayOf(ANY)),
-  filter: functionOf([arrayOf(ANY), functionOf([ANY], ANY)], arrayOf(ANY)),
+  // higher order, generic now that the checker can infer type arguments
+  map: functionOf(
+    [arrayOf(paramOf("T")), functionOf([paramOf("T")], paramOf("U"))],
+    arrayOf(paramOf("U")),
+  ),
+  filter: functionOf(
+    [arrayOf(paramOf("T")), functionOf([paramOf("T")], ANY)],
+    arrayOf(paramOf("T")),
+  ),
   reduce: functionOf(
-    [arrayOf(ANY), functionOf([ANY, ANY], ANY), ANY],
-    ANY,
+    [
+      arrayOf(paramOf("T")),
+      functionOf([paramOf("U"), paramOf("T")], paramOf("U")),
+      paramOf("U"),
+    ],
+    paramOf("U"),
   ),
 
   // sorting. sort takes an optional comparator, so its arity is not checked
-  sort: functionOf([arrayOf(ANY)], arrayOf(ANY)),
-  sort_by: functionOf([arrayOf(ANY), functionOf([ANY], ANY)], arrayOf(ANY)),
+  sort: functionOf([arrayOf(paramOf("T"))], arrayOf(paramOf("T"))),
+  sort_by: functionOf(
+    [arrayOf(paramOf("T")), functionOf([paramOf("T")], ANY)],
+    arrayOf(paramOf("T")),
+  ),
 
   // searching and aggregating
   index_of: functionOf([ANY, ANY], NUMBER),
-  find: functionOf([arrayOf(ANY), functionOf([ANY], ANY)], ANY),
+  find: functionOf(
+    [arrayOf(paramOf("T")), functionOf([paramOf("T")], ANY)],
+    paramOf("T"),
+  ),
   any: functionOf([arrayOf(ANY), functionOf([ANY], ANY)], BOOL),
   all: functionOf([arrayOf(ANY), functionOf([ANY], ANY)], BOOL),
   sum: functionOf([arrayOf(ANY)], NUMBER),
-  unique: functionOf([arrayOf(ANY)], arrayOf(ANY)),
+  unique: functionOf([arrayOf(paramOf("T"))], arrayOf(paramOf("T"))),
   flatten: functionOf([arrayOf(ANY)], arrayOf(ANY)),
   zip: functionOf([arrayOf(ANY), arrayOf(ANY)], arrayOf(ANY)),
 
@@ -228,6 +248,18 @@ export class Checker {
   private variants = new Map<string, ObjectTypeInfo>();
   // which type declared each variant, so a clash can name the other one
   private variantOwners = new Map<string, string>();
+  // generic types by name, with the parameters they take
+  private generics = new Map<string, { params: string[]; body: Type }>();
+  // type parameters currently in scope, which shadow named types
+  private typeParams = new Set<string>();
+  // aliases whose bodies have not been resolved yet
+  private pendingAliases = new Map<
+    string,
+    Extract<Statement, { kind: "type_declaration" }>
+  >();
+  // the top level scope, so a lazily resolved alias can define constructors
+  private rootScope: Scope | null = null;
+  private resolvedAliases = new Set<string>();
   // the return type of the function being checked, null at the top level
   private expectedReturn: Type | null = null;
   private loopDepth = 0;
@@ -238,23 +270,41 @@ export class Checker {
     this.types.clear();
     this.variants.clear();
     this.variantOwners.clear();
+    this.generics.clear();
+    this.typeParams.clear();
+    this.pendingAliases.clear();
+    this.resolvedAliases.clear();
     this.expectedReturn = null;
     this.loopDepth = 0;
 
     const scope = new Scope();
+    this.rootScope = scope;
     for (const [name, type] of Object.entries(PRELUDE_TYPES)) {
       scope.define(name, type);
     }
 
-    // interfaces and types first, so a declaration may reference one declared
-    // later, and so constructors exist before any code calls them
+    // declarations are hoisted so order does not matter. an alias may name an
+    // interface and an interface field may name an alias, so aliases are
+    // registered unresolved first and their bodies resolved afterwards, once
+    // every name exists.
+    const aliases = program.body.filter(
+      (statement): statement is Extract<Statement, { kind: "type_declaration" }> =>
+        statement.kind === "type_declaration" && statement.alias !== null,
+    );
+    for (const statement of aliases) {
+      this.pendingAliases.set(statement.name, statement);
+    }
+
     for (const statement of program.body) {
       if (statement.kind === "interface_declaration") {
         this.declareInterface(statement);
       }
     }
+    for (const statement of aliases) {
+      this.declareType(statement, scope);
+    }
     for (const statement of program.body) {
-      if (statement.kind === "type_declaration") {
+      if (statement.kind === "type_declaration" && !statement.alias) {
         this.declareType(statement, scope);
       }
     }
@@ -467,7 +517,25 @@ export class Checker {
       return;
     }
 
+    // the interface's own parameters are in scope while its fields resolve
+    const saved = this.typeParams;
+    this.typeParams = new Set([...saved, ...statement.typeParams]);
+
     const fields = new Map<string, FieldInfo>();
+
+    // a parent's fields come first, so a child may override one
+    for (const parent of statement.extends) {
+      const resolved = this.resolveType(parent);
+      if (resolved.kind === "object") {
+        for (const [name, field] of resolved.fields) fields.set(name, field);
+      } else if (!isAny(resolved)) {
+        this.report(
+          `Interface '${statement.name}' cannot extend ${displayType(resolved)}, which is not an interface`,
+          parent,
+        );
+      }
+    }
+
     for (const field of statement.fields) {
       fields.set(field.name, {
         type: this.resolveType(field.type),
@@ -475,10 +543,17 @@ export class Checker {
       });
     }
 
-    this.interfaces.set(
-      statement.name,
-      objectOf(fields, { name: statement.name }),
-    );
+    this.typeParams = saved;
+
+    const shape = objectOf(fields, { name: statement.name });
+    if (statement.typeParams.length > 0) {
+      this.generics.set(statement.name, {
+        params: statement.typeParams,
+        body: shape,
+      });
+    } else {
+      this.interfaces.set(statement.name, shape);
+    }
   }
 
   /**
@@ -489,8 +564,29 @@ export class Checker {
     statement: Extract<Statement, { kind: "type_declaration" }>,
     scope: Scope,
   ): void {
-    if (this.types.has(statement.name)) {
+    if (this.types.has(statement.name) || this.generics.has(statement.name)) {
+      // already resolved on demand by a reference to it
+      if (this.resolvedAliases.has(statement.name)) return;
       this.report(`Type '${statement.name}' is already declared`, statement);
+      return;
+    }
+    if (statement.alias) this.resolvedAliases.add(statement.name);
+
+    const savedParams = this.typeParams;
+    this.typeParams = new Set([...savedParams, ...statement.typeParams]);
+
+    // a plain alias names a type expression rather than declaring variants
+    if (statement.alias) {
+      const body = this.resolveType(statement.alias);
+      this.typeParams = savedParams;
+      if (statement.typeParams.length > 0) {
+        this.generics.set(statement.name, {
+          params: statement.typeParams,
+          body,
+        });
+      } else {
+        this.types.set(statement.name, body);
+      }
       return;
     }
 
@@ -542,18 +638,37 @@ export class Checker {
       );
     }
 
-    this.types.set(statement.name, unionOf(variantTypes));
+    this.typeParams = savedParams;
+
+    if (statement.typeParams.length > 0) {
+      this.generics.set(statement.name, {
+        params: statement.typeParams,
+        body: unionOf(variantTypes),
+      });
+    } else {
+      this.types.set(statement.name, unionOf(variantTypes));
+    }
   }
 
   private signatureOf(fn: {
+    typeParams?: string[];
     params: Parameter[];
     returnType: TypeNode | null;
   }): FunctionTypeInfo {
-    return functionOf(
+    // the function's own parameters are in scope while its signature resolves
+    const saved = this.typeParams;
+    if (fn.typeParams?.length) {
+      this.typeParams = new Set([...saved, ...fn.typeParams]);
+    }
+
+    const signature = functionOf(
       // an unannotated parameter is `any`, which keeps existing code checking
       fn.params.map((param) => (param.type ? this.resolveType(param.type) : ANY)),
       fn.returnType ? this.resolveType(fn.returnType) : ANY,
     );
+
+    this.typeParams = saved;
+    return signature;
   }
 
   // --- type resolution ------------------------------------------------------
@@ -562,6 +677,9 @@ export class Checker {
   private resolveType(node: TypeNode): Type {
     switch (node.kind) {
       case "named_type": {
+        // a type parameter in scope shadows every named type
+        if (this.typeParams.has(node.name)) return paramOf(node.name);
+
         switch (node.name) {
           case "number":
             return NUMBER;
@@ -581,6 +699,31 @@ export class Checker {
 
         const declared = this.interfaces.get(node.name);
         if (declared) return declared;
+
+        // an alias named before its body was resolved: resolve it now, which
+        // also breaks a cycle by leaving the name absent while it runs
+        const pending = this.pendingAliases.get(node.name);
+        if (pending) {
+          this.pendingAliases.delete(node.name);
+          this.declareType(pending, this.rootScope!);
+        }
+
+        const generic = this.generics.get(node.name);
+        if (generic) {
+          if (node.args.length !== generic.params.length) {
+            this.report(
+              `Type '${node.name}' expects ${generic.params.length} type argument(s) but received ${node.args.length}`,
+              node,
+            );
+            return ANY;
+          }
+          // substitute the supplied arguments for the declared parameters
+          const bindings = new Map<string, Type>();
+          generic.params.forEach((param, index) => {
+            bindings.set(param, this.resolveType(node.args[index]!));
+          });
+          return substitute(generic.body, bindings);
+        }
 
         const union = this.types.get(node.name);
         if (union) return union;
@@ -616,6 +759,11 @@ export class Checker {
 
       case "union_type":
         return unionOf(node.options.map((option) => this.resolveType(option)));
+
+      case "intersection_type":
+        return intersectionOf(
+          node.operands.map((operand) => this.resolveType(operand)),
+        );
     }
   }
 
@@ -822,6 +970,7 @@ export class Checker {
           signature,
           statement.body,
           scope,
+          statement.typeParams,
         );
         return;
       }
@@ -987,7 +1136,12 @@ export class Checker {
     signature: FunctionTypeInfo,
     body: BlockStatement,
     scope: Scope,
+    typeParams: string[] = [],
   ): void {
+    const savedTypeParams = this.typeParams;
+    if (typeParams.length) {
+      this.typeParams = new Set([...savedTypeParams, ...typeParams]);
+    }
     const bodyScope = new Scope(scope);
     params.forEach((param, index) => {
       bodyScope.define(param.name, signature.params[index] ?? ANY);
@@ -1003,6 +1157,7 @@ export class Checker {
 
     this.expectedReturn = previousReturn;
     this.loopDepth = previousLoopDepth;
+    this.typeParams = savedTypeParams;
   }
 
   /**
@@ -1309,6 +1464,7 @@ export class Checker {
           signature,
           expression.body,
           scope,
+          expression.typeParams,
         );
         return signature;
       }
@@ -1371,17 +1527,29 @@ export class Checker {
       );
     }
 
-    expression.args.forEach((arg, index) => {
+    // a generic signature is instantiated from the arguments, so `id(1)` works
+    // without writing `id<number>(1)`. inference runs first, then each
+    // argument is checked against the substituted parameter.
+    const bindings = new Map<string, Type>();
+    const actuals = expression.args.map((arg, index) => {
       const parameter = callee.params[index] ?? null;
       const actual = this.checkExpression(arg, scope, parameter);
+      if (parameter) inferParams(parameter, actual, bindings);
+      return actual;
+    });
 
-      if (!parameter) return;
+    expression.args.forEach((arg, index) => {
+      const declared = callee.params[index];
+      if (!declared) return;
+
+      const parameter = substitute(declared, bindings);
+      const actual = actuals[index]!;
       if (isAssignable(actual, parameter)) return;
 
       this.report(this.mismatchMessage(actual, parameter, index), arg);
     });
 
-    return callee.returns;
+    return substitute(callee.returns, bindings);
   }
 
   /** a call site mismatch, naming the missing fields when both are objects. */

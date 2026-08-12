@@ -23,6 +23,7 @@ const KEYWORDS = [
   "export",
   "interface",
   "type",
+  "extends",
   "match",
 ];
 
