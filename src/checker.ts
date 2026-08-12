@@ -226,6 +226,8 @@ export class Checker {
   // tagged unions by name, and every variant by its own name
   private types = new Map<string, Type>();
   private variants = new Map<string, ObjectTypeInfo>();
+  // which type declared each variant, so a clash can name the other one
+  private variantOwners = new Map<string, string>();
   // the return type of the function being checked, null at the top level
   private expectedReturn: Type | null = null;
   private loopDepth = 0;
@@ -235,6 +237,7 @@ export class Checker {
     this.interfaces.clear();
     this.types.clear();
     this.variants.clear();
+    this.variantOwners.clear();
     this.expectedReturn = null;
     this.loopDepth = 0;
 
@@ -503,6 +506,19 @@ export class Checker {
         continue;
       }
       seen.add(variant.name);
+
+      // a variant name is global, since it becomes a constructor binding.
+      // silently overwriting one leaves the earlier type unbuildable and
+      // produces errors that point nowhere near the real cause.
+      const clash = this.variantOwners.get(variant.name);
+      if (clash !== undefined) {
+        this.report(
+          `Variant '${variant.name}' is already declared by type '${clash}'`,
+          variant,
+        );
+        continue;
+      }
+      this.variantOwners.set(variant.name, statement.name);
 
       const fields = new Map<string, FieldInfo>();
       for (const field of variant.fields) {
