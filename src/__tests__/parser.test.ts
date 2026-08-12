@@ -552,6 +552,22 @@ describe("imports and exports", () => {
   });
 });
 
+describe("return with an if", () => {
+  // `return if done` is a guarded bare return; `return if x { a } else { b }`
+  // returns the value of an if expression. the braced body separates them.
+  test("a guard has no block", () => {
+    const statement: any = first("fn f(x) {\n return if x\n}");
+    assert.equal(statement.body.body[0].value, null);
+    assert.ok(statement.body.body[0].guard);
+  });
+
+  test("an if expression has one", () => {
+    const statement: any = first('fn f(x) {\n return if x { "y" } else { "n" }\n}');
+    assert.equal(statement.body.body[0].value.kind, "if_expression");
+    assert.equal(statement.body.body[0].guard, null);
+  });
+});
+
 describe("lambdas", () => {
   test("an expression body desugars to a returning block", () => {
     const statement: any = first("let f = (a) -> a*a");

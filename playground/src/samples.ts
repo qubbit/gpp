@@ -450,6 +450,96 @@ for node in ["b", "c", "d", "e", "f"] {
   },
 
   {
+    id: "types-tour",
+    name: "The type system",
+    description: "Aliases, extends, generics and variants together",
+    source: `// gpp is gradually typed: annotations are optional, and adding one
+// buys checking. open the Types tab to see what is enforced.
+
+// --- aliases name any type expression --------------------------------
+type Id = number | string
+type Point = {x: number, y: number}
+
+let user_id: Id = "u-1"
+let origin: Point = {x: 0, y: 0}
+
+// --- interfaces are structural, and can extend ------------------------
+interface Entity {
+  id: Id
+}
+
+interface Task extends Entity {
+  title: string
+  done: bool
+  tags: string[]
+}
+
+let tasks: Task[] = [
+  {id: 1, title: "write the parser", done: true, tags: ["core"]},
+  {id: 2, title: "add generics", done: true, tags: ["types", "core"]},
+  {id: 3, title: "write the guide", done: false, tags: ["docs"]}
+]
+
+// --- generics carry element types through -----------------------------
+fn pluck<T, U>(items: T[], get: fn(T): U): U[] {
+  return map(items, get)
+}
+
+let titles: string[] = pluck(tasks, (t): string -> t.title)
+println("all tasks: {join(titles, ", ")}")
+
+let open_tasks: Task[] = filter(tasks, (t) -> !t.done)
+println("still open: {len(open_tasks)}")
+
+// --- tagged variants model results ------------------------------------
+type Lookup =
+  | Found {task: Task}
+  | Missing {id: Id}
+
+fn find_task(id: Id): Lookup {
+  for t in tasks {
+    return Found(t) if t.id == id
+  }
+  Missing(id)
+}
+
+fn describe(result: Lookup): string {
+  return match result {
+    // task is known to be a Task here, so its fields are checked
+    Found {task}  -> "{task.title} ({len(task.tags)} tags)"
+    Missing {id}  -> "no task with id {id}"
+  }
+}
+
+println(describe(find_task(2)))
+println(describe(find_task(99)))
+
+// --- narrowing makes unions usable ------------------------------------
+fn render(value: number | string | nil): string {
+  return if value == nil {
+    "nothing"
+  } else if type_of(value) == "number" {
+    "the number {value}"
+  } else {
+    "the text {upper(value)}"
+  }
+}
+
+println(render(42))
+println(render("hello"))
+println(render(nil))
+
+// --- and the checker catches the mistakes -----------------------------
+// each line below is an error. uncomment one and open the Types tab.
+//
+// let bad_point: Point = {x: "zero", y: 0}
+// let bad_task: Task = {title: "no id", done: false, tags: []}
+// let bad_pluck: number[] = pluck(tasks, (t): string -> t.title)
+// fn incomplete(r: Lookup) { match r { Found {task} -> task } }
+`,
+  },
+
+  {
     id: "memo",
     name: "Memoisation",
     description: "Caching results in an object across calls",

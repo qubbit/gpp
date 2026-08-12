@@ -503,6 +503,111 @@ describe("lambdas", () => {
   });
 });
 
+describe("type aliases", () => {
+  test("an alias names a shape", () => {
+    clean("type Point = {x: number, y: number}\nlet p: Point = {x: 1, y: 2}");
+    rejects('type Point = {x: number}\nlet p: Point = {x: "s"}', /Cannot assign/);
+  });
+
+  test("an alias names a union", () => {
+    clean('type Id = number | string\nlet a: Id = 1\nlet b: Id = "s"');
+    rejects("type Id = number | string\nlet a: Id = true", /Cannot assign bool/);
+  });
+
+  // the case that motivated aliases: a union of anonymous shapes
+  test("an alias names a union of shapes", () => {
+    clean('type A = {s: string} | {t: bool}\nlet a: A = {s: "hi"}');
+    rejects('type A = {s: string} | {t: bool}\nlet a: A = {n: 1}', /Cannot assign/);
+  });
+
+  test("declaration order does not matter", () => {
+    clean("interface E {\n id: Id\n}\ntype Id = number | string\nlet e: E = {id: 1}");
+    clean("type Both = A & B\ninterface A {\n x: number\n}\ninterface B {\n y: number\n}\nlet b: Both = {x: 1, y: 2}");
+  });
+
+  // a variant needs a field block, so a bare name is always a type reference
+  test("a fieldless variant needs empty braces", () => {
+    clean("type O = None {}\nlet o: O = None()");
+    clean("interface A {\n x: number\n}\ninterface B {\n y: number\n}\ntype C = A | B");
+  });
+});
+
+describe("extending interfaces", () => {
+  test("a child inherits its parent's fields", () => {
+    clean("interface A {\n x: number\n}\ninterface B extends A {\n y: number\n}\nlet b: B = {x: 1, y: 2}");
+    rejects(
+      "interface A {\n x: number\n}\ninterface B extends A {\n y: number\n}\nlet b: B = {y: 2}",
+      /Cannot assign/,
+    );
+  });
+
+  test("several parents at once", () => {
+    clean(
+      "interface A {\n x: number\n}\ninterface B {\n y: number\n}\ninterface C extends A, B {\n z: number\n}\nlet c: C = {x: 1, y: 2, z: 3}",
+    );
+  });
+
+  test("a child satisfies its parent", () => {
+    clean(
+      "interface A {\n x: number\n}\ninterface B extends A {\n y: number\n}\nfn f(a: A) {\n return a.x\n}\nf({x: 1, y: 2})",
+    );
+  });
+
+  test("an intersection needs every operand", () => {
+    clean("interface A {\n x: number\n}\ninterface B {\n y: number\n}\nlet c: A & B = {x: 1, y: 2}");
+    rejects(
+      "interface A {\n x: number\n}\ninterface B {\n y: number\n}\nlet c: A & B = {x: 1}",
+      /Cannot assign/,
+    );
+  });
+});
+
+describe("generics", () => {
+  test("a type argument is inferred from the call", () => {
+    clean("fn id<T>(v: T): T {\n return v\n}\nlet n: number = id(1)");
+    rejects("fn id<T>(v: T): T {\n return v\n}\nlet s: string = id(1)", /Cannot assign number to string/);
+  });
+
+  test("several parameters are inferred independently", () => {
+    clean('fn pair<A, B>(a: A, b: B): A {\n return a\n}\nlet n: number = pair(1, "s")');
+  });
+
+  test("a generic interface is instantiated", () => {
+    clean("interface Box<T> {\n value: T\n}\nlet b: Box<number> = {value: 1}");
+    rejects('interface Box<T> {\n value: T\n}\nlet b: Box<number> = {value: "s"}', /Cannot assign/);
+  });
+
+  test("a generic alias and a generic variant", () => {
+    clean("type Pair<T> = {a: T, b: T}\nlet p: Pair<number> = {a: 1, b: 2}");
+    clean("type Opt<T> = Some {value: T} | None {}\nlet o: Opt<number> = Some(1)");
+    rejects('type Opt<T> = Some {value: T} | None {}\nlet o: Opt<number> = Some("s")', /Cannot assign/);
+  });
+
+  test("the argument count is checked", () => {
+    rejects("interface Box<T> {\n value: T\n}\nlet b: Box = {value: 1}", /expects 1 type argument/);
+  });
+
+  // the prelude is generic now, so element types flow through it
+  test("the prelude carries element types", () => {
+    clean("let xs: number[] = [1, 2]\nlet ys: number[] = filter(xs, (n) -> n > 1)");
+    rejects(
+      "let xs: number[] = [1, 2]\nlet ys: string[] = filter(xs, (n) -> n > 1)",
+      /Cannot assign number\[\] to string\[\]/,
+    );
+    clean('let xs: number[] = [1, 2]\nlet ys: string[] = map(xs, (n): string -> str(n))');
+    rejects(
+      'let xs: number[] = [1, 2]\nlet ys: number[] = map(xs, (n): string -> str(n))',
+      /Cannot assign string\[\] to number\[\]/,
+    );
+  });
+
+  // an unannotated lambda returns any, so inference stays permissive
+  test("an unannotated lambda keeps gradual behaviour", () => {
+    clean("let xs: number[] = [1, 2]\nlet ys: number[] = map(xs, (n) -> str(n))");
+    clean("println(map([1, 2], (n) -> n * 2))");
+  });
+});
+
 describe("tagged variants", () => {
   const RESULT = 'type Result =\n | Ok {value: any}\n | Err {message: string}\n';
 

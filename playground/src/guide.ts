@@ -624,7 +624,7 @@ println(type_of(Ok(5)))
 type Shape =
   | Circle {radius: number}
   | Rect {w: number, h: number}
-  | Empty
+  | Empty {}
 
 fn area(s: Shape): number {
   return match s {
@@ -727,6 +727,172 @@ fn sign(n: number): string {
 }
 
 println(sign(3), sign(-3), sign(0))`,
+      },
+      {
+        title: "Type aliases",
+        note:
+          "type names any type expression, not only a union of variants. An alias is structural, so a plain object satisfies it with no constructor.",
+        source: `// a name for a shape
+type Point = {x: number, y: number}
+
+let origin: Point = {x: 0, y: 0}
+println("origin is {origin.x}, {origin.y}")
+
+// a name for a union of primitives
+type Id = number | string
+
+let numeric: Id = 42
+let textual: Id = "abc-123"
+println(numeric, textual)
+
+// a name for a union of shapes, no interfaces needed
+type Event =
+  | {kind: string, at: number}
+  | {kind: string, at: number, detail: string}
+
+let e: Event = {kind: "click", at: 120}
+println(e)
+
+// aliases compose with everything else
+type Row = {label: string, values: number[]}
+type Table = Row[]
+
+let table: Table = [
+  {label: "a", values: [1, 2]},
+  {label: "b", values: [3]}
+]
+
+for row in table {
+  println("{row.label}: {sum(row.values)}")
+}
+
+// uncomment to see the alias enforced:
+// let bad: Point = {x: "not a number", y: 0}`,
+      },
+      {
+        title: "Extending interfaces",
+        note:
+          "An interface can inherit another's fields with extends, and several at once. A child may override a parent's field with a narrower type.",
+        source: `interface Entity {
+  id: number
+}
+
+interface Named {
+  name: string
+}
+
+// one parent
+interface User extends Entity {
+  email: string
+}
+
+// several parents at once
+interface Account extends Entity, Named {
+  balance: number
+}
+
+let u: User = {id: 1, email: "a@b.c"}
+let a: Account = {id: 2, name: "ada", balance: 100}
+
+println("user {u.id}: {u.email}")
+println("account {a.id}: {a.name} has {a.balance}")
+
+fn describe(e: Entity): string {
+  // anything extending Entity is usable here
+  return "entity {e.id}"
+}
+
+println(describe(u))
+println(describe(a))
+
+// an intersection asks for both shapes at once
+type Both = Entity & Named
+let b: Both = {id: 3, name: "grace"}
+println("{b.id} is {b.name}")
+
+// uncomment: the inherited id is still required
+// let missing: User = {email: "a@b.c"}`,
+      },
+      {
+        title: "Generics",
+        note:
+          "A type parameter stands for a type supplied later. The checker infers it from the arguments, so a call rarely needs to name it.",
+        source: `// a generic function: T is whatever it is called with
+fn first<T>(items: T[]): T {
+  return items[0]
+}
+
+let n: number = first([1, 2, 3])
+let s: string = first(["a", "b"])
+println(n, s)
+
+// two parameters, inferred independently
+fn pair<A, B>(a: A, b: B): string {
+  return "{a} and {b}"
+}
+
+println(pair(1, "one"))
+println(pair(true, [1, 2]))
+
+// a generic interface
+interface Box<T> {
+  value: T
+}
+
+let boxed: Box<number> = {value: 7}
+println("boxed {boxed.value}")
+
+// a generic alias
+type Pair<T> = {left: T, right: T}
+
+let coords: Pair<number> = {left: 1, right: 2}
+println(coords)
+
+// a generic tagged union
+type Option<T> =
+  | Some {value: T}
+  | None {}
+
+fn unwrap_or<T>(o: Option<T>, fallback: T): T {
+  return match o {
+    Some {value} -> value
+    None {}      -> fallback
+  }
+}
+
+println(unwrap_or(Some(5), 0))
+println(unwrap_or(None(), 0))
+
+// uncomment: the type argument is enforced
+// let wrong: Box<number> = {value: "not a number"}`,
+      },
+      {
+        title: "The prelude is generic too",
+        note:
+          "map, filter, reduce, sort and friends carry their element type through. Annotate a lambda's result and the checker follows it.",
+        source: `let numbers: number[] = [4, 8, 15, 16]
+
+// filter keeps the element type
+let evens: number[] = filter(numbers, (n) -> n % 2 == 0)
+println("evens: {evens}")
+
+// map changes it, and an annotated lambda says to what
+let labels: string[] = map(numbers, (n): string -> "n={n}")
+println("labels: {labels}")
+
+// reduce carries the accumulator's type
+let total: number = reduce(numbers, (a, b) -> a + b, 0)
+println("total: {total}")
+
+// sort, unique and push all preserve the element type
+let words: string[] = sort(["pear", "fig", "apple"])
+println(words)
+println(unique([1, 1, 2]))
+println(push(numbers, 23))
+
+// an unannotated lambda stays permissive, since its result is any.
+// annotate it and the mistake below is reported.
+// let oops: number[] = map(numbers, (n): string -> str(n))`,
       },
       {
         title: "Interfaces are structural",

@@ -17,12 +17,15 @@ export type TypeNode =
   | ArrayType
   | ObjectType
   | FunctionType
-  | UnionType;
+  | UnionType
+  | IntersectionType;
 
 export interface NamedType extends Position {
   kind: "named_type";
-  // number, string, bool, any, void, or an interface name
+  // number, string, bool, any, void, an interface name, or a type parameter
   name: string;
+  // `Box<number>` supplies arguments for a generic type's parameters
+  args: TypeNode[];
 }
 
 export interface ArrayType extends Position {
@@ -50,6 +53,12 @@ export interface FunctionType extends Position {
 export interface UnionType extends Position {
   kind: "union_type";
   options: TypeNode[];
+}
+
+// `A & B` — a value satisfying every operand at once
+export interface IntersectionType extends Position {
+  kind: "intersection_type";
+  operands: TypeNode[];
 }
 
 // --- patterns ---------------------------------------------------------------
@@ -226,6 +235,7 @@ export interface FunctionExpression extends Position {
   kind: "function_expression";
   // null for anonymous functions
   name: string | null;
+  typeParams: string[];
   params: Parameter[];
   returnType: TypeNode | null;
   body: BlockStatement;
@@ -335,6 +345,7 @@ export interface ForStatement extends Position {
 export interface FunctionDeclaration extends Position {
   kind: "function_declaration";
   name: string;
+  typeParams: string[];
   params: Parameter[];
   returnType: TypeNode | null;
   body: BlockStatement;
@@ -365,7 +376,12 @@ export interface ContinueStatement extends Position {
 export interface TypeDeclaration extends Position {
   kind: "type_declaration";
   name: string;
+  typeParams: string[];
+  // a declaration is either a tagged union of named variants, or a plain
+  // alias for a type expression. never both: mixing them would leave it
+  // ambiguous whether the result is nominal.
   variants: VariantDeclaration[];
+  alias: TypeNode | null;
 }
 
 export interface VariantDeclaration extends Position {
@@ -376,6 +392,10 @@ export interface VariantDeclaration extends Position {
 export interface InterfaceDeclaration extends Position {
   kind: "interface_declaration";
   name: string;
+  // `interface B extends A, C` inherits every parent's fields
+  extends: NamedType[];
+  // generic parameters, so `interface Box<T>` can be instantiated
+  typeParams: string[];
   fields: TypeField[];
 }
 
