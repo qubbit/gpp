@@ -583,6 +583,16 @@ describe("tagged variants", () => {
     rejects("type T =\n | A {x: number}\ntype T =\n | B {y: number}", /already declared/);
     rejects("type T =\n | A {x: number}\n | A {y: number}", /declared twice/);
   });
+
+  // a variant name is a global constructor binding, so a second type reusing
+  // one would silently shadow it and leave the first type unbuildable
+  test("a variant name reused by another type is reported", () => {
+    rejects(
+      "type A = X {s: string}\ntype B = X {n: number}",
+      /Variant 'X' is already declared by type 'A'/,
+    );
+    clean("type A = X {s: string}\ntype B = Z {n: number}");
+  });
 });
 
 describe("narrowing", () => {
