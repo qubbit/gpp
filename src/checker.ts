@@ -78,6 +78,56 @@ function alwaysLeaves(block: BlockStatement): boolean {
   });
 }
 
+/**
+ * whether a block is guaranteed to produce a value, either by returning on
+ * every path or by ending in a statement that yields one.
+ *
+ * distinct from alwaysLeaves, which also counts break and continue: those
+ * leave the block without producing a return value, so they do not satisfy a
+ * declared return type.
+ */
+function alwaysProduces(block: BlockStatement): boolean {
+  const last = block.body[block.body.length - 1];
+
+  // an unguarded return anywhere means every later statement is unreachable,
+  // so the block produces a value regardless of what the last statement is
+  const returnsEarly = block.body.some(
+    (statement) =>
+      statement.kind === "return_statement" && !statement.guard,
+  );
+  if (returnsEarly) return true;
+
+  if (!last) return false;
+
+  switch (last.kind) {
+    // the implicit return: a trailing expression is the block's value
+    case "expression_statement":
+      return true;
+
+    case "block_statement":
+      return alwaysProduces(last);
+
+    // an if produces a value only when every branch does, which needs an else
+    case "if_statement": {
+      if (!last.alternate) return false;
+      const alternate =
+        last.alternate.kind === "block_statement"
+          ? alwaysProduces(last.alternate)
+          : alwaysProduces({
+              kind: "block_statement",
+              body: [last.alternate],
+              line: last.line,
+              column: last.column,
+            });
+      return alwaysProduces(last.consequent) && alternate;
+    }
+
+    default:
+      // a let, an assignment or a loop contributes no value
+      return false;
+  }
+}
+
 /** renders a literal pattern's value the way a user would write it. */
 function stringifyLiteral(value: number | string | boolean | null): string {
   if (value === null) return "nil";
@@ -1155,6 +1205,8 @@ export class Checker {
 
     this.checkBlock(body, bodyScope);
 
+    this.checkAlwaysReturns(signature.returns, body);
+
     this.expectedReturn = previousReturn;
     this.loopDepth = previousLoopDepth;
     this.typeParams = savedTypeParams;
@@ -1171,6 +1223,32 @@ export class Checker {
       return fields.length ? unionOf(fields) : ANY;
     }
     return element;
+  }
+
+  /**
+   * reports a function that declares a return type but can fall off its end.
+   *
+   * only fires on an explicit annotation: an unannotated function returns
+   * `any`, and nil is a perfectly good `any`. void and nil are excluded too,
+   * since falling off the end is exactly what they describe.
+   */
+  private checkAlwaysReturns(returns: Type, body: BlockStatement): void {
+    if (isAny(returns)) return;
+    if (returns.kind === "primitive") {
+      if (returns.name === "void" || returns.name === "nil") return;
+    }
+    // a nilable return type already allows the fall-through
+    if (returns.kind === "union" && returns.options.some((o) => typesEqual(o, NIL))) {
+      return;
+    }
+
+    if (alwaysProduces(body)) return;
+
+    this.report(
+      `This function can finish without returning a ${displayType(returns)}. ` +
+        `Add a return on every path, or widen the type to ${displayType(returns)} | nil.`,
+      body,
+    );
   }
 
   /** the type of the first binding in `for k, v in ...`. */

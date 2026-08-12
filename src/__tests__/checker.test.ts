@@ -700,6 +700,56 @@ describe("tagged variants", () => {
   });
 });
 
+describe("definite return", () => {
+  // an annotated function that falls off its end returns nil, which the
+  // annotation says it will not
+  test("a missing path is reported", () => {
+    rejects(
+      "fn add(x: number, y: number): number {\n if x > 0 {\n  return x + y\n }\n}",
+      /can finish without returning a number/,
+    );
+    rejects("fn f(): number {\n}", /can finish without returning/);
+    rejects("fn f(): number {\n let a = 1\n}", /can finish without returning/);
+    rejects("fn f(): number {\n while false {\n  return 1\n }\n}", /can finish without returning/);
+  });
+
+  test("an incomplete else if chain is reported", () => {
+    rejects(
+      "fn f(x: number): number {\n if x > 0 {\n  return 1\n } else if x < 0 {\n  return 2\n }\n}",
+      /can finish without returning/,
+    );
+    clean(
+      "fn f(x: number): number {\n if x > 0 {\n  return 1\n } else if x < 0 {\n  return 2\n } else {\n  return 3\n }\n}",
+    );
+  });
+
+  // a guard may not fire, so it does not guarantee a return on its own
+  test("a guarded return alone is not enough", () => {
+    rejects("fn f(x: number): number {\n return 1 if x > 0\n}", /can finish without returning/);
+    clean("fn f(x: number): number {\n return 1 if x > 0\n 2\n}");
+  });
+
+  // gpp's implicit return means a trailing value counts
+  test("an implicit return satisfies the check", () => {
+    clean("fn f(): number {\n 42\n}");
+    clean("fn f(x: number): number {\n if x > 0 { 1 } else { 2 }\n}");
+    clean("fn f(x: number): number {\n match x {\n  1 -> 10\n  _ -> 20\n }\n}");
+    clean("fn f(): number {\n {\n  return 1\n }\n}");
+  });
+
+  // the check is about the annotation, so unannotated code is untouched
+  test("only an explicit non nil annotation is checked", () => {
+    clean("fn f(x) {\n if x {\n  return 1\n }\n}");
+    clean("fn f(): void {\n println(1)\n}");
+    clean("fn f(x: number): number | nil {\n if x > 0 {\n  return 1\n }\n}");
+  });
+
+  test("an annotated lambda is checked too", () => {
+    rejects("let f = (x): number -> {\n if x {\n  return 1\n }\n}", /can finish without returning/);
+    clean("let f = (x): number -> {\n if x {\n  return 1\n }\n 0\n}");
+  });
+});
+
 describe("narrowing", () => {
   test("a nil test refines the branch", () => {
     clean("fn f(x: number | nil) {\n if x != nil {\n  let n: number = x\n }\n}");
